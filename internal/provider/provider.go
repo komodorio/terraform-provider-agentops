@@ -108,6 +108,9 @@ func (p *KomodorAgentOpsProvider) Resources(ctx context.Context) []func() resour
 	return []func() resource.Resource{
 		NewTriggerResource,
 		NewAPIKeyResource,
+		NewRoleResource,
+		NewPolicyResource,
+		NewGrantResource,
 		NewServiceAccountResource,
 		NewScheduleResource,
 		NewCredentialResource,

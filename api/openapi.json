@@ -1914,6 +1914,93 @@
         "title": "AuthUser",
         "type": "object"
       },
+      "AuthzAccessCheckResult": {
+        "properties": {
+          "allowed": {
+            "title": "Allowed",
+            "type": "boolean"
+          },
+          "matched_grant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Grant Id"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "allowed",
+          "reason"
+        ],
+        "title": "AuthzAccessCheckResult",
+        "type": "object"
+      },
+      "AuthzAgent": {
+        "properties": {
+          "agent_id": {
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "principal_id": {
+            "title": "Principal Id",
+            "type": "string"
+          },
+          "role_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Role Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "agent_id",
+          "principal_id",
+          "name"
+        ],
+        "title": "AuthzAgent",
+        "type": "object"
+      },
+      "AuthzCapabilityInfo": {
+        "properties": {
+          "allows": {
+            "title": "Allows",
+            "type": "string"
+          },
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "sensitivity": {
+            "title": "Sensitivity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "domain",
+          "allows",
+          "sensitivity"
+        ],
+        "title": "AuthzCapabilityInfo",
+        "type": "object"
+      },
       "AuthzContext": {
         "description": "The caller's authorization view \u2014 a \"display extra\" (like ``is_system_admin``) hydrated only on\nthe ``/auth/me`` path, for nav-gating admin affordances. The server still enforces every action\nper-resource; this is UX only.\n\n``capabilities`` is the coarse, deduped set of capability keys the acting principal holds anywhere\nin the active account (no resource scope). ``mode`` is this caller's resolved ``EnforcementMode``\nstring value ``\"off\"``/``\"shadow\"``/``\"enforce\"`` (typed as ``str`` to keep the identity module\nfree of an authz import, which would cycle): the UI must gate nav **only** when\n``mode == \"enforce\"`` \u2014 under off/shadow the server allows everything, so hiding tabs would be\nwrong (see #953).",
         "properties": {
@@ -1933,6 +2020,535 @@
           "mode"
         ],
         "title": "AuthzContext",
+        "type": "object"
+      },
+      "AuthzEffectiveCapability": {
+        "properties": {
+          "capability": {
+            "title": "Capability",
+            "type": "string"
+          },
+          "grant_id": {
+            "title": "Grant Id",
+            "type": "string"
+          },
+          "resource_id": {
+            "title": "Resource Id",
+            "type": "string"
+          },
+          "resource_type": {
+            "title": "Resource Type",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "via": {
+            "title": "Via",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capability",
+          "resource_type",
+          "resource_id",
+          "via",
+          "source",
+          "grant_id"
+        ],
+        "title": "AuthzEffectiveCapability",
+        "type": "object"
+      },
+      "AuthzGrant": {
+        "properties": {
+          "capability": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capability"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "grant_kind": {
+            "title": "Grant Kind",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "policy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Id"
+          },
+          "resource_id": {
+            "title": "Resource Id",
+            "type": "string"
+          },
+          "resource_type": {
+            "title": "Resource Type",
+            "type": "string"
+          },
+          "role_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role Id"
+          },
+          "selector": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selector"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/AuthzGrantSubject"
+          }
+        },
+        "required": [
+          "id",
+          "subject",
+          "grant_kind",
+          "resource_type",
+          "resource_id",
+          "created_at"
+        ],
+        "title": "AuthzGrant",
+        "type": "object"
+      },
+      "AuthzGrantSubject": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "principal",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ],
+        "title": "AuthzGrantSubject",
+        "type": "object"
+      },
+      "AuthzMember": {
+        "description": "A member row for the list / attribute-edit views \u2014 adds the user-managed ABAC attributes.",
+        "properties": {
+          "attributes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Attributes",
+            "type": "object"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
+          "principal_id": {
+            "title": "Principal Id",
+            "type": "string"
+          },
+          "role_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Role Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "principal_id",
+          "email"
+        ],
+        "title": "AuthzMember",
+        "type": "object"
+      },
+      "AuthzMemberRoles": {
+        "description": "A member's role-assignment result (what ``PUT \u2026/members/{id}/roles`` returns).",
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
+          "principal_id": {
+            "title": "Principal Id",
+            "type": "string"
+          },
+          "role_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Role Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "principal_id",
+          "email"
+        ],
+        "title": "AuthzMemberRoles",
+        "type": "object"
+      },
+      "AuthzPolicy": {
+        "properties": {
+          "builtin": {
+            "title": "Builtin",
+            "type": "boolean"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "grants": {
+            "items": {
+              "$ref": "#/components/schemas/AuthzPolicyGrant"
+            },
+            "title": "Grants",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "builtin",
+          "created_at"
+        ],
+        "title": "AuthzPolicy",
+        "type": "object"
+      },
+      "AuthzPolicyGrant": {
+        "properties": {
+          "capability": {
+            "title": "Capability",
+            "type": "string"
+          },
+          "effect": {
+            "title": "Effect",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "resource_id": {
+            "title": "Resource Id",
+            "type": "string"
+          },
+          "resource_type": {
+            "title": "Resource Type",
+            "type": "string"
+          },
+          "selector": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selector"
+          }
+        },
+        "required": [
+          "id",
+          "capability",
+          "resource_type",
+          "resource_id",
+          "effect"
+        ],
+        "title": "AuthzPolicyGrant",
+        "type": "object"
+      },
+      "AuthzPrincipal": {
+        "properties": {
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subtitle"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name"
+        ],
+        "title": "AuthzPrincipal",
+        "type": "object"
+      },
+      "AuthzResourceType": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "notes": {
+            "title": "Notes",
+            "type": "string"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "scope",
+          "notes"
+        ],
+        "title": "AuthzResourceType",
+        "type": "object"
+      },
+      "AuthzRole": {
+        "properties": {
+          "builtin": {
+            "title": "Builtin",
+            "type": "boolean"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "holders": {
+            "title": "Holders",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "policy_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Policy Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "builtin",
+          "holders"
+        ],
+        "title": "AuthzRole",
+        "type": "object"
+      },
+      "AuthzServiceAccount": {
+        "description": "A service-account row for the list / attribute-edit views \u2014 adds ABAC attributes.",
+        "properties": {
+          "attributes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Attributes",
+            "type": "object"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "principal_id": {
+            "title": "Principal Id",
+            "type": "string"
+          },
+          "role_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Role Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "principal_id"
+        ],
+        "title": "AuthzServiceAccount",
+        "type": "object"
+      },
+      "AuthzServiceAccountRoles": {
+        "description": "A service account's role-assignment result (what ``PUT \u2026/service-accounts/{id}/roles`` returns).",
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "principal_id": {
+            "title": "Principal Id",
+            "type": "string"
+          },
+          "role_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Role Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "principal_id"
+        ],
+        "title": "AuthzServiceAccountRoles",
         "type": "object"
       },
       "AutoScoreSeries": {
@@ -2148,6 +2764,188 @@
           "bare_name"
         ],
         "title": "CatalogTool",
+        "type": "object"
+      },
+      "ChannelResponse": {
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "capabilities_json": {
+            "additionalProperties": true,
+            "title": "Capabilities Json",
+            "type": "object"
+          },
+          "config_json": {
+            "additionalProperties": true,
+            "title": "Config Json",
+            "type": "object"
+          },
+          "connector": {
+            "title": "Connector",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "external_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "integration_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Integration Id"
+          },
+          "labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Labels",
+            "type": "object"
+          },
+          "last_event_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Event At"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "account_id",
+          "provider",
+          "connector",
+          "display_name",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ChannelResponse",
+        "type": "object"
+      },
+      "ChannelRouteResponse": {
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "channel_id": {
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "input_json": {
+            "additionalProperties": true,
+            "title": "Input Json",
+            "type": "object"
+          },
+          "is_default": {
+            "title": "Is Default",
+            "type": "boolean"
+          },
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "match_json": {
+            "additionalProperties": true,
+            "title": "Match Json",
+            "type": "object"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "integer"
+          },
+          "rule_type": {
+            "title": "Rule Type",
+            "type": "string"
+          },
+          "target_id": {
+            "title": "Target Id",
+            "type": "string"
+          },
+          "target_type": {
+            "title": "Target Type",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "account_id",
+          "channel_id",
+          "priority",
+          "rule_type",
+          "target_type",
+          "target_id",
+          "is_default",
+          "is_enabled",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ChannelRouteResponse",
         "type": "object"
       },
       "ChatMessage": {
@@ -3068,10 +3866,10 @@
           "status": {
             "enum": [
               "active",
-              "expired",
-              "revoked",
+              "pending",
               "error",
-              "pending"
+              "revoked",
+              "disabled"
             ],
             "title": "Status",
             "type": "string"
@@ -5706,10 +6504,10 @@
           "status": {
             "enum": [
               "active",
-              "expired",
-              "revoked",
+              "pending",
               "error",
-              "pending"
+              "revoked",
+              "disabled"
             ],
             "title": "Status",
             "type": "string"
@@ -5819,10 +6617,10 @@
           "status": {
             "enum": [
               "active",
-              "expired",
-              "revoked",
+              "pending",
               "error",
-              "pending"
+              "revoked",
+              "disabled"
             ],
             "title": "Status",
             "type": "string"
@@ -10217,6 +11015,17 @@
       },
       "StartIntegrationOAuthRequest": {
         "properties": {
+          "connection_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Id"
+          },
           "display_name": {
             "title": "Display Name",
             "type": "string"
@@ -10449,10 +11258,10 @@
           "status": {
             "enum": [
               "active",
-              "expired",
-              "revoked",
+              "pending",
               "error",
-              "pending"
+              "revoked",
+              "disabled"
             ],
             "title": "Status",
             "type": "string"
@@ -16614,9 +17423,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Authz Check Access",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AuthzAccessCheckResult"
                 }
               }
             },
@@ -16648,8 +17455,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/AuthzAgent"
                   },
                   "title": "Response Authz List Agents",
                   "type": "array"
@@ -16694,9 +17500,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Authz Set Agent Roles",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AuthzAgent"
                 }
               }
             },
@@ -16728,8 +17532,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/AuthzCapabilityInfo"
                   },
                   "title": "Response Authz List Capabilities",
                   "type": "array"
@@ -16772,8 +17575,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/AuthzGrant"
                   },
                   "title": "Response Authz List Grants",
                   "type": "array"
@@ -16815,9 +17617,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Authz Create Grant",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AuthzGrant"
                 }
               }
             },
@@ -16902,9 +17702,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Authz Update Grant",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AuthzGrant"
                 }
               }
             },
@@ -16936,8 +17734,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/AuthzMember"
                   },
                   "title": "Response Authz List Members",
                   "type": "array"
@@ -16982,9 +17779,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Authz Set Member Attributes",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AuthzMember"
                 }
               }
             },
@@ -17036,9 +17831,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Authz Set Member Roles",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AuthzMemberRoles"
                 }
               }
             },
@@ -17070,8 +17863,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/AuthzPolicy"
                   },
                   "title": "Response Authz List Policies",
                   "type": "array"
@@ -17103,9 +17895,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Authz Create Policy",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AuthzPolicy"
                 }
               }
             },
@@ -17190,9 +17980,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Authz Update Policy",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AuthzPolicy"
                 }
               }
             },
@@ -17224,8 +18012,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/AuthzPrincipal"
                   },
                   "title": "Response Authz List Principals",
                   "type": "array"
@@ -17261,8 +18048,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/AuthzEffectiveCapability"
                   },
                   "title": "Response Authz Effective Access",
                   "type": "array"
@@ -17297,8 +18083,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/AuthzResourceType"
                   },
                   "title": "Response Authz List Resource Types",
                   "type": "array"
@@ -17323,8 +18108,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/AuthzRole"
                   },
                   "title": "Response Authz List Roles",
                   "type": "array"
@@ -17356,9 +18140,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Authz Create Role",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AuthzRole"
                 }
               }
             },
@@ -17443,9 +18225,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Authz Update Role",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AuthzRole"
                 }
               }
             },
@@ -17477,8 +18257,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/AuthzServiceAccount"
                   },
                   "title": "Response Authz List Service Accounts",
                   "type": "array"
@@ -17523,9 +18302,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Authz Set Service Account Attributes",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AuthzServiceAccount"
                 }
               }
             },
@@ -17577,9 +18354,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Authz Set Service Account Roles",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AuthzServiceAccountRoles"
                 }
               }
             },
@@ -17611,8 +18386,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/ChannelResponse"
                   },
                   "title": "Response Channels List Channels Endpoint",
                   "type": "array"
@@ -17644,9 +18418,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Channels Create Channel Endpoint",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ChannelResponse"
                 }
               }
             },
@@ -17721,9 +18493,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Channels Get Channel Endpoint",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ChannelResponse"
                 }
               }
             },
@@ -17773,9 +18543,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Channels Update Channel Endpoint",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ChannelResponse"
                 }
               }
             },
@@ -17817,9 +18585,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Channels Pause Channel Endpoint",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ChannelResponse"
                 }
               }
             },
@@ -17861,9 +18627,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Channels Resume Channel Endpoint",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ChannelResponse"
                 }
               }
             },
@@ -17906,8 +18670,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/ChannelRouteResponse"
                   },
                   "title": "Response Channels List Routes Endpoint",
                   "type": "array"
@@ -17960,9 +18723,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Channels Add Route Endpoint",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ChannelRouteResponse"
                 }
               }
             },
@@ -18065,9 +18826,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Channels Update Route Endpoint",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ChannelRouteResponse"
                 }
               }
             },
