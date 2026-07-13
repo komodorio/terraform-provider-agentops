@@ -28,6 +28,7 @@ type crudResource struct {
 }
 
 var crudRegistry = []crudResource{
+	{"/api/v1/accounts/members", "principal_id", "mbr", map[string]any{"status": "active", "display_name": "member", "user_id": "usr_1", "created_at": mockTS}},
 	{"/api/v1/credentials", "id", "cred", map[string]any{"status": "active", "created_at": mockTS, "updated_at": mockTS}},
 	{"/api/v1/workflows", "workflow_id", "wf", map[string]any{"is_enabled": true, "steps": []any{}, "trigger": map[string]any{}, "created_at": mockTS, "updated_at": mockTS}},
 	{"/api/v1/knowledge-bases", "kb_id", "kb", map[string]any{"doc_count": 0, "indexed_count": 0, "created_at": mockTS, "updated_at": mockTS}},
@@ -51,9 +52,18 @@ type mockServer struct {
 	serviceAccs map[string]map[string]any
 	policies    map[string]map[string]any
 	conns       map[string]map[string]any
+	bindings    map[string]map[string]map[string]any // credential_id -> agent_id -> binding
+	kbAgents    map[string]map[string]map[string]any // kb_id -> agent_id -> grant
 	stores      map[string]map[string]map[string]any // generic CRUD: collection -> id -> record
 	seq         int
 }
+
+var (
+	credBindingsRe = regexp.MustCompile(`^/api/v1/credentials/([^/]+)/bindings$`)
+	credBindingRe  = regexp.MustCompile(`^/api/v1/credentials/([^/]+)/bindings/([^/]+)$`)
+	kbAgentsRe     = regexp.MustCompile(`^/api/v1/knowledge-bases/([^/]+)/agents$`)
+	kbAgentRe      = regexp.MustCompile(`^/api/v1/knowledge-bases/([^/]+)/agents/([^/]+)$`)
+)
 
 var (
 	triggerIDRe  = regexp.MustCompile(`^/api/v1/triggers/([^/]+)$`)
@@ -72,6 +82,8 @@ func newMockServer(t *testing.T) *mockServer {
 		serviceAccs: map[string]map[string]any{},
 		policies:    map[string]map[string]any{},
 		conns:       map[string]map[string]any{},
+		bindings:    map[string]map[string]map[string]any{},
+		kbAgents:    map[string]map[string]map[string]any{},
 		stores:      map[string]map[string]map[string]any{},
 	}
 	for _, res := range crudRegistry {
@@ -132,6 +144,28 @@ func (m *mockServer) handle(w http.ResponseWriter, r *http.Request) {
 		m.createConnection(w, r)
 	case strings.HasPrefix(r.URL.Path, "/api/v1/integrations/connections/"):
 		m.connectionByID(w, r, strings.TrimPrefix(r.URL.Path, "/api/v1/integrations/connections/"))
+
+	case credBindingsRe.MatchString(r.URL.Path):
+		m.credBindings(w, r, credBindingsRe.FindStringSubmatch(r.URL.Path)[1])
+	case credBindingRe.MatchString(r.URL.Path) && r.Method == http.MethodDelete:
+		mm := credBindingRe.FindStringSubmatch(r.URL.Path)
+		m.credBindingDelete(w, mm[1], mm[2])
+	case kbAgentsRe.MatchString(r.URL.Path):
+		m.kbAgentGrants(w, r, kbAgentsRe.FindStringSubmatch(r.URL.Path)[1])
+	case kbAgentRe.MatchString(r.URL.Path) && r.Method == http.MethodDelete:
+		mm := kbAgentRe.FindStringSubmatch(r.URL.Path)
+		m.kbAgentDelete(w, mm[1], mm[2])
+
+	case r.URL.Path == "/api/v1/integrations/catalog" && r.Method == http.MethodGet:
+		writeJSON(w, http.StatusOK, []map[string]any{{"auth_config_key": "github", "auth_mode": "oauth", "category": "scm", "description": "GitHub", "name": "GitHub", "provider": "github", "available": true, "capabilities": []any{"repos.read"}}})
+	case r.URL.Path == "/api/v1/authz/capabilities" && r.Method == http.MethodGet:
+		writeJSON(w, http.StatusOK, []map[string]any{{"allows": "read", "domain": "agents", "key": "agent.invoke", "sensitivity": "low"}})
+	case r.URL.Path == "/api/v1/authz/resource-types" && r.Method == http.MethodGet:
+		writeJSON(w, http.StatusOK, []map[string]any{{"key": "agent", "notes": "an agent", "scope": "account"}})
+	case r.URL.Path == "/api/v1/worker-catalog" && r.Method == http.MethodGet:
+		writeJSON(w, http.StatusOK, []map[string]any{{"id": "wc_1", "name": "datadog-investigator", "description": "d", "category": "observability", "status": "available", "ready": true}})
+	case r.URL.Path == "/api/v1/skills" && r.Method == http.MethodGet:
+		writeJSON(w, http.StatusOK, []map[string]any{{"skill_id": "sk_1", "name": "search", "description": "d", "md5": "abc", "updated_at": mockTS, "tags": []any{"core"}}})
 
 	default:
 		if m.dispatchCRUD(w, r) {
@@ -238,6 +272,67 @@ func (m *mockServer) createConnection(w http.ResponseWriter, r *http.Request) {
 		"auth_config_key": "acfg_" + id,
 		"status":          "connected",
 	})
+}
+
+func (m *mockServer) credBindings(w http.ResponseWriter, r *http.Request, credID string) {
+	switch r.Method {
+	case http.MethodPost:
+		body := decode(r)
+		agent, _ := body["agent_id"].(string)
+		rec := map[string]any{"agent_id": agent, "credential_id": credID, "created_at": mockTS}
+		if v, ok := body["on_demand"]; ok && v != nil {
+			rec["on_demand"] = v
+		}
+		if m.bindings[credID] == nil {
+			m.bindings[credID] = map[string]map[string]any{}
+		}
+		m.bindings[credID][agent] = rec
+		writeJSON(w, http.StatusCreated, rec)
+	case http.MethodGet:
+		out := make([]map[string]any, 0)
+		for _, v := range m.bindings[credID] {
+			out = append(out, v)
+		}
+		writeJSON(w, http.StatusOK, out)
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{})
+	}
+}
+
+func (m *mockServer) credBindingDelete(w http.ResponseWriter, credID, agentID string) {
+	if m.bindings[credID] != nil {
+		delete(m.bindings[credID], agentID)
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (m *mockServer) kbAgentGrants(w http.ResponseWriter, r *http.Request, kbID string) {
+	switch r.Method {
+	case http.MethodPost:
+		body := decode(r)
+		agent, _ := body["agent_id"].(string)
+		rec := map[string]any{"agent_id": agent, "kb_id": kbID, "grant_id": m.nextID("grant"), "created_at": mockTS}
+		if m.kbAgents[kbID] == nil {
+			m.kbAgents[kbID] = map[string]map[string]any{}
+		}
+		m.kbAgents[kbID][agent] = rec
+		writeJSON(w, http.StatusCreated, rec)
+	case http.MethodGet:
+		out := make([]map[string]any, 0)
+		for _, v := range m.kbAgents[kbID] {
+			out = append(out, v)
+		}
+		writeJSON(w, http.StatusOK, out)
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{})
+	}
+}
+
+func (m *mockServer) kbAgentDelete(w http.ResponseWriter, kbID, agentID string) {
+	if m.kbAgents[kbID] != nil {
+		delete(m.kbAgents[kbID], agentID)
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (m *mockServer) connectionByID(w http.ResponseWriter, r *http.Request, id string) {

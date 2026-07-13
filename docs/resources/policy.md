@@ -19,7 +19,7 @@ resource "agentops_policy" "deploy" {
 
   # grants is a free-form JSON array of grant definitions.
   grants = jsonencode([
-    { capability = "agents.deploy", resource_type = "agent" },
+    { capability = "agent.invoke", resource_type = "agent" },
   ])
 }
 ```
