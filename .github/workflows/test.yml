@@ -46,11 +46,16 @@ jobs:
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_wrapper: false
-      - run: make generate
+      - name: Check examples are formatted
+        run: terraform fmt -check -recursive ./examples
+      - name: Regenerate client from the committed spec
+        run: make generate
+      - name: Regenerate docs from schemas + examples
+        run: make docs
       - name: git diff
         run: |
           git diff --compact-summary --exit-code || \
-            (echo; echo "Unexpected difference in directories after code generation. Run 'make generate' command and commit."; exit 1)
+            (echo; echo "Unexpected difference after 'make generate' / 'make docs'. Run them and commit the result."; exit 1)
 
   # Run acceptance tests in a matrix with Terraform CLI versions
   test:

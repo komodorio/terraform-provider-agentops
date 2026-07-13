@@ -5,44 +5,39 @@ package provider
 
 import (
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-// TestAccTriggerResource exercises a full create/read/update/import round-trip
-// against a live AgentOps API. It runs only when TF_ACC=1; set AGENTOPS_API_KEY,
-// AGENTOPS_ENDPOINT (for non-prod), and AGENTOPS_TEST_TARGET_ID to a valid target.
+// TestAccTriggerResource drives a full create/read/update/import/destroy cycle
+// against the in-process mock server. It requires TF_ACC=1 (set in CI) but no
+// live backend, so it runs deterministically without secrets.
 func TestAccTriggerResource(t *testing.T) {
-	targetID := os.Getenv("AGENTOPS_TEST_TARGET_ID")
+	mock := newMockServer(t)
 
 	resource.Test(t, resource.TestCase{
-		PreCheck: func() {
-			testAccPreCheck(t)
-			if targetID == "" {
-				t.Skip("AGENTOPS_TEST_TARGET_ID not set")
-			}
-		},
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
-			{
-				Config: testAccTriggerConfig(targetID, "acctest trigger", true),
+			{ // Create
+				Config: testAccTriggerConfig(mock.URL, "acctest trigger", true),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("agentops_trigger.test", "id"),
 					resource.TestCheckResourceAttrSet("agentops_trigger.test", "token"),
 					resource.TestCheckResourceAttr("agentops_trigger.test", "name", "acctest trigger"),
+					resource.TestCheckResourceAttr("agentops_trigger.test", "target_id", "agent_1"),
 					resource.TestCheckResourceAttr("agentops_trigger.test", "is_enabled", "true"),
 				),
 			},
-			{
+			{ // Import
 				ResourceName:            "agentops_trigger.test",
 				ImportState:             true,
 				ImportStateVerify:       true,
 				ImportStateVerifyIgnore: []string{"token", "signing_secret"},
 			},
-			{
-				Config: testAccTriggerConfig(targetID, "acctest trigger renamed", false),
+			{ // Update: rename + disable
+				Config: testAccTriggerConfig(mock.URL, "acctest trigger renamed", false),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("agentops_trigger.test", "name", "acctest trigger renamed"),
 					resource.TestCheckResourceAttr("agentops_trigger.test", "is_enabled", "false"),
@@ -52,13 +47,13 @@ func TestAccTriggerResource(t *testing.T) {
 	})
 }
 
-func testAccTriggerConfig(targetID, name string, enabled bool) string {
-	return fmt.Sprintf(`
+func testAccTriggerConfig(endpoint, name string, enabled bool) string {
+	return mockProviderConfig(endpoint) + fmt.Sprintf(`
 resource "agentops_trigger" "test" {
   name        = %q
-  target_id   = %q
+  target_id   = "agent_1"
   target_type = "agent"
   is_enabled  = %t
 }
-`, name, targetID, enabled)
+`, name, enabled)
 }
