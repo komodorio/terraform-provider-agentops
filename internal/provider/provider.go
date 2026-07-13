@@ -17,31 +17,31 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-// Ensure AgentOpsProvider satisfies various provider interfaces.
-var _ provider.Provider = &AgentOpsProvider{}
-var _ provider.ProviderWithFunctions = &AgentOpsProvider{}
-var _ provider.ProviderWithEphemeralResources = &AgentOpsProvider{}
-var _ provider.ProviderWithActions = &AgentOpsProvider{}
+// Ensure KomodorAgentOpsProvider satisfies various provider interfaces.
+var _ provider.Provider = &KomodorAgentOpsProvider{}
+var _ provider.ProviderWithFunctions = &KomodorAgentOpsProvider{}
+var _ provider.ProviderWithEphemeralResources = &KomodorAgentOpsProvider{}
+var _ provider.ProviderWithActions = &KomodorAgentOpsProvider{}
 
-// AgentOpsProvider defines the provider implementation.
-type AgentOpsProvider struct {
+// KomodorAgentOpsProvider defines the provider implementation.
+type KomodorAgentOpsProvider struct {
 	// version is set to the provider version on release, "dev" when the
 	// provider is built and ran locally, and "test" when running acceptance
 	// testing.
 	version string
 }
 
-// AgentOpsProviderModel describes the provider data model.
-type AgentOpsProviderModel struct {
+// KomodorAgentOpsProviderModel describes the provider data model.
+type KomodorAgentOpsProviderModel struct {
 	Endpoint types.String `tfsdk:"endpoint"`
 }
 
-func (p *AgentOpsProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
+func (p *KomodorAgentOpsProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
 	resp.TypeName = "agentops"
 	resp.Version = p.version
 }
 
-func (p *AgentOpsProvider) Schema(ctx context.Context, req provider.SchemaRequest, resp *provider.SchemaResponse) {
+func (p *KomodorAgentOpsProvider) Schema(ctx context.Context, req provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"endpoint": schema.StringAttribute{
@@ -52,8 +52,8 @@ func (p *AgentOpsProvider) Schema(ctx context.Context, req provider.SchemaReques
 	}
 }
 
-func (p *AgentOpsProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
-	var data AgentOpsProviderModel
+func (p *KomodorAgentOpsProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
+	var data KomodorAgentOpsProviderModel
 
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 
@@ -70,31 +70,31 @@ func (p *AgentOpsProvider) Configure(ctx context.Context, req provider.Configure
 	resp.ResourceData = client
 }
 
-func (p *AgentOpsProvider) Resources(ctx context.Context) []func() resource.Resource {
+func (p *KomodorAgentOpsProvider) Resources(ctx context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewExampleResource,
 	}
 }
 
-func (p *AgentOpsProvider) EphemeralResources(ctx context.Context) []func() ephemeral.EphemeralResource {
+func (p *KomodorAgentOpsProvider) EphemeralResources(ctx context.Context) []func() ephemeral.EphemeralResource {
 	return []func() ephemeral.EphemeralResource{
 		NewExampleEphemeralResource,
 	}
 }
 
-func (p *AgentOpsProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
+func (p *KomodorAgentOpsProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
 		NewExampleDataSource,
 	}
 }
 
-func (p *AgentOpsProvider) Functions(ctx context.Context) []func() function.Function {
+func (p *KomodorAgentOpsProvider) Functions(ctx context.Context) []func() function.Function {
 	return []func() function.Function{
 		NewExampleFunction,
 	}
 }
 
-func (p *AgentOpsProvider) Actions(ctx context.Context) []func() action.Action {
+func (p *KomodorAgentOpsProvider) Actions(ctx context.Context) []func() action.Action {
 	return []func() action.Action{
 		NewExampleAction,
 	}
@@ -102,7 +102,7 @@ func (p *AgentOpsProvider) Actions(ctx context.Context) []func() action.Action {
 
 func New(version string) func() provider.Provider {
 	return func() provider.Provider {
-		return &AgentOpsProvider{
+		return &KomodorAgentOpsProvider{
 			version: version,
 		}
 	}
