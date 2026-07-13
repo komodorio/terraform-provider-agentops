@@ -916,6 +916,18 @@
             "title": "Description",
             "type": "string"
           },
+          "draft_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft Config"
+          },
           "endpoint_url": {
             "anyOf": [
               {
@@ -977,8 +989,15 @@
             "type": "object"
           },
           "last_heartbeat_at": {
-            "title": "Last Heartbeat At",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Heartbeat At"
           },
           "latest_run_at": {
             "anyOf": [
@@ -1100,7 +1119,8 @@
           "status": {
             "enum": [
               "online",
-              "offline"
+              "offline",
+              "draft"
             ],
             "title": "Status",
             "type": "string"
@@ -1118,15 +1138,20 @@
             "type": "string"
           },
           "worker_id": {
-            "title": "Worker Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Id"
           }
         },
         "required": [
           "agent_id",
-          "worker_id",
-          "status",
-          "last_heartbeat_at"
+          "status"
         ],
         "title": "AgentInstanceResponse",
         "type": "object"
@@ -1943,7 +1968,7 @@
         "title": "BindCredentialRequest",
         "type": "object"
       },
-      "Body_upload_document_api_v1_knowledge_bases__kb_id__documents_post": {
+      "Body_knowledge_upload_document": {
         "properties": {
           "doc_type": {
             "anyOf": [
@@ -2031,7 +2056,7 @@
         "required": [
           "file"
         ],
-        "title": "Body_upload_document_api_v1_knowledge_bases__kb_id__documents_post",
+        "title": "Body_knowledge_upload_document",
         "type": "object"
       },
       "CatalogTool": {
@@ -2585,6 +2610,30 @@
           "name"
         ],
         "title": "CreateAccountRequest",
+        "type": "object"
+      },
+      "CreateAgentDraftRequest": {
+        "description": "Create (or resume) a draft agent from the Add-Agent wizard's first step.\n\n``agent_id`` is the operator's friendly per-account name (the id_slug); the control plane freezes\nan opaque internal agent_id against it at draft-create time and returns it. ``config`` is the\nopaque wizard state, persisted for cross-device resume.",
+        "properties": {
+          "agent_id": {
+            "title": "CreateAgentDraftIdSlug",
+            "type": "string"
+          },
+          "config": {
+            "additionalProperties": true,
+            "title": "CreateAgentDraftConfig",
+            "type": "object"
+          },
+          "display_name": {
+            "default": "",
+            "title": "Display Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id"
+        ],
+        "title": "CreateAgentDraftRequest",
         "type": "object"
       },
       "CreateAgentMcpServer": {
@@ -4736,7 +4785,8 @@
           "status": {
             "enum": [
               "online",
-              "offline"
+              "offline",
+              "draft"
             ],
             "title": "Status",
             "type": "string"
@@ -4806,6 +4856,17 @@
           "instructions": {
             "title": "Instructions",
             "type": "string"
+          },
+          "mcpGroupId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mcpgroupid"
           },
           "mcpServers": {
             "anyOf": [
@@ -4955,7 +5016,8 @@
               {
                 "enum": [
                   "online",
-                  "offline"
+                  "offline",
+                  "draft"
                 ],
                 "type": "string"
               },
@@ -10765,6 +10827,36 @@
         "title": "UpdateAccountRequest",
         "type": "object"
       },
+      "UpdateAgentDraftRequest": {
+        "description": "Autosave the wizard state for an existing draft (draft-only; a promoted agent rejects this).\n\n``config`` is optional: ``None`` (omitted) leaves the stored config untouched, so a display-name-only\npatch never wipes the saved wizard state. The wizard always sends the full config.",
+        "properties": {
+          "config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "UpdateAgentDraftConfig"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          }
+        },
+        "title": "UpdateAgentDraftRequest",
+        "type": "object"
+      },
       "UpdateAgentLabelsRequest": {
         "properties": {
           "labels": {
@@ -12938,7 +13030,7 @@
   "paths": {
     "/a2a/{agent_id}/.well-known/agent-card.json": {
       "get": {
-        "operationId": "get_agent_card_a2a__agent_id___well_known_agent_card_json_get",
+        "operationId": "a2a_get_agent_card",
         "parameters": [
           {
             "in": "path",
@@ -12956,7 +13048,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Get Agent Card A2A  Agent Id   Well Known Agent Card Json Get",
+                  "title": "Response A2A Get Agent Card",
                   "type": "object"
                 }
               }
@@ -12982,7 +13074,7 @@
     },
     "/a2a/{agent_id}/message:send": {
       "post": {
-        "operationId": "message_send_a2a__agent_id__message_send_post",
+        "operationId": "a2a_message_send",
         "parameters": [
           {
             "in": "path",
@@ -13034,7 +13126,7 @@
     },
     "/a2a/{agent_id}/message:stream": {
       "post": {
-        "operationId": "message_stream_a2a__agent_id__message_stream_post",
+        "operationId": "a2a_message_stream",
         "parameters": [
           {
             "in": "path",
@@ -13086,7 +13178,7 @@
     },
     "/a2a/{agent_id}/tasks/{task_id}": {
       "get": {
-        "operationId": "get_task_a2a__agent_id__tasks__task_id__get",
+        "operationId": "a2a_get_task",
         "parameters": [
           {
             "in": "path",
@@ -13137,7 +13229,7 @@
     },
     "/a2a/{agent_id}/tasks/{task_id}:cancel": {
       "post": {
-        "operationId": "cancel_task_a2a__agent_id__tasks__task_id__cancel_post",
+        "operationId": "a2a_cancel_task",
         "parameters": [
           {
             "in": "path",
@@ -13188,7 +13280,7 @@
     },
     "/a2a/{agent_id}/tasks/{task_id}:subscribe": {
       "post": {
-        "operationId": "subscribe_task_a2a__agent_id__tasks__task_id__subscribe_post",
+        "operationId": "a2a_subscribe_task",
         "parameters": [
           {
             "in": "path",
@@ -13239,7 +13331,7 @@
     },
     "/api/chat": {
       "post": {
-        "operationId": "chat_api_chat_post",
+        "operationId": "chat_chat",
         "requestBody": {
           "content": {
             "application/json": {
@@ -13283,7 +13375,7 @@
     },
     "/api/chat/models": {
       "get": {
-        "operationId": "list_chat_models_api_chat_models_get",
+        "operationId": "chat_list_chat_models",
         "responses": {
           "200": {
             "content": {
@@ -13292,7 +13384,7 @@
                   "items": {
                     "$ref": "#/components/schemas/ChatModel"
                   },
-                  "title": "Response List Chat Models Api Chat Models Get",
+                  "title": "Response Chat List Chat Models",
                   "type": "array"
                 }
               }
@@ -13308,7 +13400,7 @@
     },
     "/api/chat/sessions": {
       "get": {
-        "operationId": "list_chat_sessions_api_chat_sessions_get",
+        "operationId": "chat_list_chat_sessions",
         "parameters": [
           {
             "in": "query",
@@ -13335,7 +13427,7 @@
                   "items": {
                     "$ref": "#/components/schemas/ChatSessionSummary"
                   },
-                  "title": "Response List Chat Sessions Api Chat Sessions Get",
+                  "title": "Response Chat List Chat Sessions",
                   "type": "array"
                 }
               }
@@ -13359,7 +13451,7 @@
         ]
       },
       "post": {
-        "operationId": "create_chat_session_api_chat_sessions_post",
+        "operationId": "chat_create_chat_session",
         "requestBody": {
           "content": {
             "application/json": {
@@ -13400,7 +13492,7 @@
     },
     "/api/chat/sessions/start": {
       "post": {
-        "operationId": "start_chat_session_api_chat_sessions_start_post",
+        "operationId": "chat_start_chat_session",
         "requestBody": {
           "content": {
             "application/json": {
@@ -13441,7 +13533,7 @@
     },
     "/api/chat/sessions/{session_id}": {
       "delete": {
-        "operationId": "delete_chat_session_api_chat_sessions__session_id__delete",
+        "operationId": "chat_delete_chat_session",
         "parameters": [
           {
             "in": "path",
@@ -13474,7 +13566,7 @@
         ]
       },
       "get": {
-        "operationId": "get_chat_session_api_chat_sessions__session_id__get",
+        "operationId": "chat_get_chat_session",
         "parameters": [
           {
             "in": "path",
@@ -13514,7 +13606,7 @@
         ]
       },
       "patch": {
-        "operationId": "update_chat_session_api_chat_sessions__session_id__patch",
+        "operationId": "chat_update_chat_session",
         "parameters": [
           {
             "in": "path",
@@ -13566,7 +13658,7 @@
     },
     "/api/chat/sessions/{session_id}/messages": {
       "post": {
-        "operationId": "stream_chat_session_message_api_chat_sessions__session_id__messages_post",
+        "operationId": "chat_stream_chat_session_message",
         "parameters": [
           {
             "in": "path",
@@ -13621,7 +13713,7 @@
     },
     "/api/chat/sessions/{session_id}/responses": {
       "post": {
-        "operationId": "stream_chat_response_api_chat_sessions__session_id__responses_post",
+        "operationId": "chat_stream_chat_response",
         "parameters": [
           {
             "in": "path",
@@ -13676,7 +13768,7 @@
     },
     "/api/v1/accounts/members": {
       "get": {
-        "operationId": "list_members_endpoint_api_v1_accounts_members_get",
+        "operationId": "members_list_members_endpoint",
         "responses": {
           "200": {
             "content": {
@@ -13685,7 +13777,7 @@
                   "items": {
                     "$ref": "#/components/schemas/MemberView"
                   },
-                  "title": "Response List Members Endpoint Api V1 Accounts Members Get",
+                  "title": "Response Members List Members Endpoint",
                   "type": "array"
                 }
               }
@@ -13693,10 +13785,13 @@
             "description": "Successful Response"
           }
         },
-        "summary": "List Members Endpoint"
+        "summary": "List Members Endpoint",
+        "tags": [
+          "members"
+        ]
       },
       "post": {
-        "operationId": "invite_member_endpoint_api_v1_accounts_members_post",
+        "operationId": "members_invite_member_endpoint",
         "requestBody": {
           "content": {
             "application/json": {
@@ -13729,12 +13824,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Invite Member Endpoint"
+        "summary": "Invite Member Endpoint",
+        "tags": [
+          "members"
+        ]
       }
     },
     "/api/v1/accounts/members/{principal_id}": {
       "delete": {
-        "operationId": "remove_member_endpoint_api_v1_accounts_members__principal_id__delete",
+        "operationId": "members_remove_member_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -13754,7 +13852,7 @@
                   "additionalProperties": {
                     "type": "string"
                   },
-                  "title": "Response Remove Member Endpoint Api V1 Accounts Members  Principal Id  Delete",
+                  "title": "Response Members Remove Member Endpoint",
                   "type": "object"
                 }
               }
@@ -13772,12 +13870,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Remove Member Endpoint"
+        "summary": "Remove Member Endpoint",
+        "tags": [
+          "members"
+        ]
       }
     },
     "/api/v1/accounts/members/{principal_id}/restore": {
       "post": {
-        "operationId": "restore_member_endpoint_api_v1_accounts_members__principal_id__restore_post",
+        "operationId": "members_restore_member_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -13811,12 +13912,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Restore Member Endpoint"
+        "summary": "Restore Member Endpoint",
+        "tags": [
+          "members"
+        ]
       }
     },
     "/api/v1/accounts/service-accounts": {
       "get": {
-        "operationId": "list_service_accounts_endpoint_api_v1_accounts_service_accounts_get",
+        "operationId": "service-accounts_list_service_accounts_endpoint",
         "responses": {
           "200": {
             "content": {
@@ -13825,7 +13929,7 @@
                   "items": {
                     "$ref": "#/components/schemas/ServiceAccountView"
                   },
-                  "title": "Response List Service Accounts Endpoint Api V1 Accounts Service Accounts Get",
+                  "title": "Response Service-Accounts List Service Accounts Endpoint",
                   "type": "array"
                 }
               }
@@ -13833,10 +13937,13 @@
             "description": "Successful Response"
           }
         },
-        "summary": "List Service Accounts Endpoint"
+        "summary": "List Service Accounts Endpoint",
+        "tags": [
+          "service-accounts"
+        ]
       },
       "post": {
-        "operationId": "create_service_account_endpoint_api_v1_accounts_service_accounts_post",
+        "operationId": "service-accounts_create_service_account_endpoint",
         "requestBody": {
           "content": {
             "application/json": {
@@ -13869,12 +13976,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Create Service Account Endpoint"
+        "summary": "Create Service Account Endpoint",
+        "tags": [
+          "service-accounts"
+        ]
       }
     },
     "/api/v1/accounts/service-accounts/{principal_id}": {
       "delete": {
-        "operationId": "disable_service_account_endpoint_api_v1_accounts_service_accounts__principal_id__delete",
+        "operationId": "service-accounts_disable_service_account_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -13894,7 +14004,7 @@
                   "additionalProperties": {
                     "type": "string"
                   },
-                  "title": "Response Disable Service Account Endpoint Api V1 Accounts Service Accounts  Principal Id  Delete",
+                  "title": "Response Service-Accounts Disable Service Account Endpoint",
                   "type": "object"
                 }
               }
@@ -13912,12 +14022,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Disable Service Account Endpoint"
+        "summary": "Disable Service Account Endpoint",
+        "tags": [
+          "service-accounts"
+        ]
       }
     },
     "/api/v1/accounts/service-accounts/{principal_id}/restore": {
       "post": {
-        "operationId": "enable_service_account_endpoint_api_v1_accounts_service_accounts__principal_id__restore_post",
+        "operationId": "service-accounts_enable_service_account_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -13951,13 +14064,16 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Enable Service Account Endpoint"
+        "summary": "Enable Service Account Endpoint",
+        "tags": [
+          "service-accounts"
+        ]
       }
     },
     "/api/v1/admin/accounts": {
       "get": {
         "description": "All accounts, optionally name/slug-filtered (newest first). Read-only \u2014 not audited.",
-        "operationId": "list_accounts_api_v1_admin_accounts_get",
+        "operationId": "admin_list_accounts",
         "parameters": [
           {
             "in": "query",
@@ -13984,7 +14100,7 @@
                   "items": {
                     "$ref": "#/components/schemas/AdminAccountView"
                   },
-                  "title": "Response List Accounts Api V1 Admin Accounts Get",
+                  "title": "Response Admin List Accounts",
                   "type": "array"
                 }
               }
@@ -14010,7 +14126,7 @@
       },
       "post": {
         "description": "Create a new account. The insert + its audit row commit together; a duplicate slug rolls the\nwhole thing back and returns 409.",
-        "operationId": "create_account_api_v1_admin_accounts_post",
+        "operationId": "admin_create_account",
         "requestBody": {
           "content": {
             "application/json": {
@@ -14052,7 +14168,7 @@
     },
     "/api/v1/admin/accounts/{account_id}": {
       "get": {
-        "operationId": "get_account_api_v1_admin_accounts__account_id__get",
+        "operationId": "admin_get_account",
         "parameters": [
           {
             "in": "path",
@@ -14094,7 +14210,7 @@
       },
       "patch": {
         "description": "Rename and/or edit an account's free-form ``settings``. ``slug`` and ``status`` are not\neditable here (status flips go through suspend/reactivate).",
-        "operationId": "update_account_api_v1_admin_accounts__account_id__patch",
+        "operationId": "admin_update_account",
         "parameters": [
           {
             "in": "path",
@@ -14147,7 +14263,7 @@
     },
     "/api/v1/admin/accounts/{account_id}/llm-gateway": {
       "get": {
-        "operationId": "get_account_gateway_api_v1_admin_accounts__account_id__llm_gateway_get",
+        "operationId": "admin_get_account_gateway",
         "parameters": [
           {
             "in": "path",
@@ -14188,7 +14304,7 @@
         ]
       },
       "patch": {
-        "operationId": "update_account_gateway_api_v1_admin_accounts__account_id__llm_gateway_patch",
+        "operationId": "admin_update_account_gateway",
         "parameters": [
           {
             "in": "path",
@@ -14242,7 +14358,7 @@
     "/api/v1/admin/accounts/{account_id}/reactivate": {
       "post": {
         "description": "Reactivate a suspended account.",
-        "operationId": "reactivate_account_api_v1_admin_accounts__account_id__reactivate_post",
+        "operationId": "admin_reactivate_account",
         "parameters": [
           {
             "in": "path",
@@ -14296,7 +14412,7 @@
     "/api/v1/admin/accounts/{account_id}/suspend": {
       "post": {
         "description": "Suspend an account (walls the tenant off; no hard delete).",
-        "operationId": "suspend_account_api_v1_admin_accounts__account_id__suspend_post",
+        "operationId": "admin_suspend_account",
         "parameters": [
           {
             "in": "path",
@@ -14350,7 +14466,7 @@
     "/api/v1/admin/accounts/{account_id}/trusted-domains": {
       "get": {
         "description": "List an account's trusted domains. Read-only \u2014 not audited.",
-        "operationId": "list_domains_api_v1_admin_accounts__account_id__trusted_domains_get",
+        "operationId": "admin_list_domains",
         "parameters": [
           {
             "in": "path",
@@ -14370,7 +14486,7 @@
                   "items": {
                     "$ref": "#/components/schemas/TrustedDomainView"
                   },
-                  "title": "Response List Domains Api V1 Admin Accounts  Account Id  Trusted Domains Get",
+                  "title": "Response Admin List Domains",
                   "type": "array"
                 }
               }
@@ -14396,7 +14512,7 @@
       },
       "post": {
         "description": "Register a trusted domain. 409 if this account already has the domain (the same domain may\nstill be registered on other accounts); 422 if it isn't a valid email domain.",
-        "operationId": "add_domain_api_v1_admin_accounts__account_id__trusted_domains_post",
+        "operationId": "admin_add_domain",
         "parameters": [
           {
             "in": "path",
@@ -14450,7 +14566,7 @@
     "/api/v1/admin/accounts/{account_id}/trusted-domains/{domain}": {
       "delete": {
         "description": "Unregister a trusted domain from the account. 404 if the account or domain isn't found.\n``reason`` is a required query param (DELETE bodies are unreliable across proxies).",
-        "operationId": "remove_domain_api_v1_admin_accounts__account_id__trusted_domains__domain__delete",
+        "operationId": "admin_remove_domain",
         "parameters": [
           {
             "in": "path",
@@ -14512,7 +14628,7 @@
     "/api/v1/admin/accounts/{account_id}/usage": {
       "get": {
         "description": "Activity + inventory counts for one account (404 if the account doesn't exist).",
-        "operationId": "account_usage_api_v1_admin_accounts__account_id__usage_get",
+        "operationId": "admin_account_usage",
         "parameters": [
           {
             "in": "path",
@@ -14556,7 +14672,7 @@
     "/api/v1/admin/analytics/overview": {
       "get": {
         "description": "Cross-account totals + the busiest accounts by recent runs.",
-        "operationId": "platform_overview_api_v1_admin_analytics_overview_get",
+        "operationId": "admin_platform_overview",
         "parameters": [
           {
             "in": "query",
@@ -14603,7 +14719,7 @@
     "/api/v1/admin/audit": {
       "get": {
         "description": "Cross-account platform-admin activity feed (newest first). Optionally scope to one account.",
-        "operationId": "list_platform_audit_api_v1_admin_audit_get",
+        "operationId": "admin_list_platform_audit",
         "parameters": [
           {
             "in": "query",
@@ -14654,7 +14770,7 @@
                   "items": {
                     "$ref": "#/components/schemas/PlatformAuditEntryView"
                   },
-                  "title": "Response List Platform Audit Api V1 Admin Audit Get",
+                  "title": "Response Admin List Platform Audit",
                   "type": "array"
                 }
               }
@@ -14682,7 +14798,7 @@
     "/api/v1/admin/authz/decisions": {
       "get": {
         "description": "Raw authz decisions over the window, newest first. ``deny_only`` is the deny drill-down (keyed\non the PDP verdict, so shadow would-denies are included); ``account`` (a slug)/``action`` narrow\nfurther.",
-        "operationId": "list_decisions_api_v1_admin_authz_decisions_get",
+        "operationId": "admin_list_decisions",
         "parameters": [
           {
             "description": "account slug; omit for all accounts",
@@ -14792,7 +14908,7 @@
                   "items": {
                     "$ref": "#/components/schemas/DecisionEntryView"
                   },
-                  "title": "Response List Decisions Api V1 Admin Authz Decisions Get",
+                  "title": "Response Admin List Decisions",
                   "type": "array"
                 }
               }
@@ -14820,7 +14936,7 @@
     "/api/v1/admin/authz/decisions/summary": {
       "get": {
         "description": "Per-action authz-decision roll-up over the window, busiest first. Cross-account unless\n``account`` (a slug) scopes it to one tenant.",
-        "operationId": "summarize_decisions_api_v1_admin_authz_decisions_summary_get",
+        "operationId": "admin_summarize_decisions",
         "parameters": [
           {
             "description": "account slug; omit for all accounts",
@@ -14861,7 +14977,7 @@
                   "items": {
                     "$ref": "#/components/schemas/ActionSummaryView"
                   },
-                  "title": "Response Summarize Decisions Api V1 Admin Authz Decisions Summary Get",
+                  "title": "Response Admin Summarize Decisions",
                   "type": "array"
                 }
               }
@@ -14889,7 +15005,7 @@
     "/api/v1/admin/fleet": {
       "get": {
         "description": "Registered agents (offline first) with heartbeat + reachability. Scope to one account with\n``account_id`` \u2014 the console requires picking one; an unscoped call spans all accounts.",
-        "operationId": "list_fleet_api_v1_admin_fleet_get",
+        "operationId": "admin_list_fleet",
         "parameters": [
           {
             "in": "query",
@@ -14926,7 +15042,7 @@
                   "items": {
                     "$ref": "#/components/schemas/FleetAgentView"
                   },
-                  "title": "Response List Fleet Api V1 Admin Fleet Get",
+                  "title": "Response Admin List Fleet",
                   "type": "array"
                 }
               }
@@ -14954,7 +15070,7 @@
     "/api/v1/admin/impersonation-sessions": {
       "get": {
         "description": "Currently-active impersonation / account-view sessions, newest first. Read-only \u2014 not audited.",
-        "operationId": "list_sessions_api_v1_admin_impersonation_sessions_get",
+        "operationId": "admin_list_sessions",
         "responses": {
           "200": {
             "content": {
@@ -14963,7 +15079,7 @@
                   "items": {
                     "$ref": "#/components/schemas/ImpersonationSessionView"
                   },
-                  "title": "Response List Sessions Api V1 Admin Impersonation Sessions Get",
+                  "title": "Response Admin List Sessions",
                   "type": "array"
                 }
               }
@@ -14981,7 +15097,7 @@
     "/api/v1/admin/impersonation-sessions/{sid}/revoke": {
       "post": {
         "description": "Kill a session: add its ``sid`` to the revocation denylist so the next request on it is logged\nout (cluster-wide). 404 if the session isn't currently active (already stopped/revoked/expired).",
-        "operationId": "revoke_impersonation_session_api_v1_admin_impersonation_sessions__sid__revoke_post",
+        "operationId": "admin_revoke_impersonation_session",
         "parameters": [
           {
             "in": "path",
@@ -15027,7 +15143,7 @@
     },
     "/api/v1/admin/llm-gateway/models": {
       "get": {
-        "operationId": "list_gateway_models_api_v1_admin_llm_gateway_models_get",
+        "operationId": "admin_list_gateway_models",
         "responses": {
           "200": {
             "content": {
@@ -15036,7 +15152,7 @@
                   "items": {
                     "$ref": "#/components/schemas/GatewayModel"
                   },
-                  "title": "Response List Gateway Models Api V1 Admin Llm Gateway Models Get",
+                  "title": "Response Admin List Gateway Models",
                   "type": "array"
                 }
               }
@@ -15046,13 +15162,14 @@
         },
         "summary": "List Gateway Models",
         "tags": [
+          "admin",
           "admin"
         ]
       }
     },
     "/api/v1/admin/queues": {
       "get": {
-        "operationId": "list_queues_api_v1_admin_queues_get",
+        "operationId": "admin_list_queues",
         "responses": {
           "200": {
             "content": {
@@ -15061,7 +15178,7 @@
                   "items": {
                     "$ref": "#/components/schemas/QueueView"
                   },
-                  "title": "Response List Queues Api V1 Admin Queues Get",
+                  "title": "Response Admin List Queues",
                   "type": "array"
                 }
               }
@@ -15078,7 +15195,7 @@
     },
     "/api/v1/admin/queues/{queue_name}/messages": {
       "get": {
-        "operationId": "read_messages_api_v1_admin_queues__queue_name__messages_get",
+        "operationId": "admin_read_messages",
         "parameters": [
           {
             "in": "path",
@@ -15110,7 +15227,7 @@
                   "items": {
                     "$ref": "#/components/schemas/MessageView"
                   },
-                  "title": "Response Read Messages Api V1 Admin Queues  Queue Name  Messages Get",
+                  "title": "Response Admin Read Messages",
                   "type": "array"
                 }
               }
@@ -15135,7 +15252,7 @@
         ]
       },
       "post": {
-        "operationId": "enqueue_message_api_v1_admin_queues__queue_name__messages_post",
+        "operationId": "admin_enqueue_message",
         "parameters": [
           {
             "in": "path",
@@ -15188,7 +15305,7 @@
     },
     "/api/v1/admin/queues/{queue_name}/messages/delete": {
       "post": {
-        "operationId": "delete_selected_api_v1_admin_queues__queue_name__messages_delete_post",
+        "operationId": "admin_delete_selected",
         "parameters": [
           {
             "in": "path",
@@ -15241,7 +15358,7 @@
     },
     "/api/v1/admin/queues/{queue_name}/messages/{msg_id}": {
       "delete": {
-        "operationId": "delete_message_api_v1_admin_queues__queue_name__messages__msg_id__delete",
+        "operationId": "admin_delete_message",
         "parameters": [
           {
             "in": "path",
@@ -15309,7 +15426,7 @@
     },
     "/api/v1/admin/queues/{queue_name}/messages/{msg_id}/requeue": {
       "post": {
-        "operationId": "requeue_message_api_v1_admin_queues__queue_name__messages__msg_id__requeue_post",
+        "operationId": "admin_requeue_message",
         "parameters": [
           {
             "in": "path",
@@ -15371,7 +15488,7 @@
     },
     "/api/v1/admin/queues/{queue_name}/purge": {
       "post": {
-        "operationId": "purge_queue_api_v1_admin_queues__queue_name__purge_post",
+        "operationId": "admin_purge_queue",
         "parameters": [
           {
             "in": "path",
@@ -15424,7 +15541,7 @@
     },
     "/api/v1/admin/queues/{queue_name}/requeue-all": {
       "post": {
-        "operationId": "requeue_all_api_v1_admin_queues__queue_name__requeue_all_post",
+        "operationId": "admin_requeue_all",
         "parameters": [
           {
             "in": "path",
@@ -15478,7 +15595,7 @@
     "/api/v1/admin/system-admins": {
       "get": {
         "description": "Read-only roster of platform admins. Grants/revokes are CLI/break-glass only \u2014 there is no\nmutation here by design.",
-        "operationId": "list_system_admins_api_v1_admin_system_admins_get",
+        "operationId": "admin_list_system_admins",
         "responses": {
           "200": {
             "content": {
@@ -15487,7 +15604,7 @@
                   "items": {
                     "$ref": "#/components/schemas/SystemAdminView"
                   },
-                  "title": "Response List System Admins Api V1 Admin System Admins Get",
+                  "title": "Response Admin List System Admins",
                   "type": "array"
                 }
               }
@@ -15504,7 +15621,7 @@
     },
     "/api/v1/agents": {
       "get": {
-        "operationId": "list_agents_api_v1_agents_get",
+        "operationId": "agents_list_agents",
         "parameters": [
           {
             "in": "query",
@@ -15525,7 +15642,7 @@
                   "items": {
                     "$ref": "#/components/schemas/AgentInstanceResponse"
                   },
-                  "title": "Response List Agents Api V1 Agents Get",
+                  "title": "Response Agents List Agents",
                   "type": "array"
                 }
               }
@@ -15550,7 +15667,7 @@
       },
       "post": {
         "description": "Mint a revocable worker token and render a self-deploy ``helm install`` command + values.\n\nOperator-only (``require_user``): creating a worker token is an operator action; a worker token must not reach it.",
-        "operationId": "create_agent_api_v1_agents_post",
+        "operationId": "agents_create_agent",
         "requestBody": {
           "content": {
             "application/json": {
@@ -15589,10 +15706,52 @@
         ]
       }
     },
+    "/api/v1/agents/drafts": {
+      "post": {
+        "description": "Create (or resume) a *draft* agent for the Add-Agent wizard's first step.\n\nFreezes an opaque agent_id against the friendly name so the wizard is resumable by id and the\neventual worker token binds to it. Idempotent per name: an in-progress draft is returned as-is\n(the caller routes into resume), a live agent's name yields 409. Operator-only (``require_user``).",
+        "operationId": "agents_create_draft",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAgentDraftRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentInstanceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Draft",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
     "/api/v1/agents/worker-token": {
       "post": {
         "description": "Create (or rotate) a revocable worker token for a friendly agent id, without a full self-deploy render.\n\nOperator-only (``require_user``): a worker token must never create another worker token, regardless of authz mode.",
-        "operationId": "create_worker_token_api_v1_agents_worker_token_post",
+        "operationId": "agents_create_worker_token",
         "requestBody": {
           "content": {
             "application/json": {
@@ -15633,7 +15792,7 @@
     },
     "/api/v1/agents/{agent_id}": {
       "get": {
-        "operationId": "get_agent_api_v1_agents__agent_id__get",
+        "operationId": "agents_get_agent",
         "parameters": [
           {
             "in": "path",
@@ -15675,7 +15834,7 @@
     },
     "/api/v1/agents/{agent_id}/archive": {
       "patch": {
-        "operationId": "archive_agent_api_v1_agents__agent_id__archive_patch",
+        "operationId": "agents_archive_agent",
         "parameters": [
           {
             "in": "path",
@@ -15718,7 +15877,7 @@
     "/api/v1/agents/{agent_id}/disable": {
       "patch": {
         "description": "Disable an agent so its triggers stop firing. Manual invocations still work.",
-        "operationId": "disable_agent_api_v1_agents__agent_id__disable_patch",
+        "operationId": "agents_disable_agent",
         "parameters": [
           {
             "in": "path",
@@ -15758,10 +15917,63 @@
         ]
       }
     },
+    "/api/v1/agents/{agent_id}/draft": {
+      "patch": {
+        "description": "Autosave the wizard config for a draft agent. Draft-only (a live agent returns 409). Operator-only.",
+        "operationId": "agents_update_draft",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAgentDraftRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentInstanceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Draft",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
     "/api/v1/agents/{agent_id}/enable": {
       "patch": {
         "description": "Enable an agent so its triggers may fire. Disabled agents already accept manual invocations.",
-        "operationId": "enable_agent_api_v1_agents__agent_id__enable_patch",
+        "operationId": "agents_enable_agent",
         "parameters": [
           {
             "in": "path",
@@ -15803,7 +16015,7 @@
     },
     "/api/v1/agents/{agent_id}/invoke": {
       "post": {
-        "operationId": "invoke_agent_api_v1_agents__agent_id__invoke_post",
+        "operationId": "invoke_invoke_agent",
         "parameters": [
           {
             "in": "path",
@@ -15886,7 +16098,7 @@
     },
     "/api/v1/agents/{agent_id}/labels": {
       "patch": {
-        "operationId": "update_agent_labels_api_v1_agents__agent_id__labels_patch",
+        "operationId": "agents_update_agent_labels",
         "parameters": [
           {
             "in": "path",
@@ -15938,7 +16150,7 @@
     },
     "/api/v1/agents/{agent_id}/mcp-group": {
       "patch": {
-        "operationId": "set_mcp_group_api_v1_agents__agent_id__mcp_group_patch",
+        "operationId": "agents_set_mcp_group",
         "parameters": [
           {
             "in": "path",
@@ -15991,7 +16203,7 @@
     "/api/v1/agents/{agent_id}/token": {
       "delete": {
         "description": "Revoke the self-deployed agent's worker token. Idempotent. Operator-only (``require_user``).",
-        "operationId": "revoke_agent_token_api_v1_agents__agent_id__token_delete",
+        "operationId": "agents_revoke_agent_token",
         "parameters": [
           {
             "in": "path",
@@ -16025,7 +16237,7 @@
       },
       "get": {
         "description": "Read the agent's worker-token lifecycle status (exists / created / rotated / expiry).\n\nMetadata only \u2014 never the token value. Backs the per-agent \"Worker token\" panel so an operator can\nsee whether a token is live before rotating or revoking it. ``agent_id`` is the friendly handle or\nthe opaque id; ``resolve_agent_id`` maps either to the canonical opaque id (and falls back to the\nraw ref when no agent row exists yet \u2014 a self-registering agent's token may already be minted,\nkeyed by that id, so we must not 404 a token that is real).",
-        "operationId": "get_agent_token_status_api_v1_agents__agent_id__token_get",
+        "operationId": "agents_get_agent_token_status",
         "parameters": [
           {
             "in": "path",
@@ -16067,7 +16279,7 @@
     },
     "/api/v1/agents/{agent_id}/unarchive": {
       "patch": {
-        "operationId": "unarchive_agent_api_v1_agents__agent_id__unarchive_patch",
+        "operationId": "agents_unarchive_agent",
         "parameters": [
           {
             "in": "path",
@@ -16109,7 +16321,7 @@
     },
     "/api/v1/agents/{agent_id}/versions": {
       "get": {
-        "operationId": "list_agent_versions_api_v1_agents__agent_id__versions_get",
+        "operationId": "agents_list_agent_versions",
         "parameters": [
           {
             "in": "path",
@@ -16129,7 +16341,7 @@
                   "items": {
                     "$ref": "#/components/schemas/AgentGenerationInfo"
                   },
-                  "title": "Response List Agent Versions Api V1 Agents  Agent Id  Versions Get",
+                  "title": "Response Agents List Agent Versions",
                   "type": "array"
                 }
               }
@@ -16155,7 +16367,7 @@
     },
     "/api/v1/api-keys": {
       "get": {
-        "operationId": "list_api_keys_endpoint_api_v1_api_keys_get",
+        "operationId": "api-keys_list_api_keys_endpoint",
         "responses": {
           "200": {
             "content": {
@@ -16164,7 +16376,7 @@
                   "items": {
                     "$ref": "#/components/schemas/ApiKeyView"
                   },
-                  "title": "Response List Api Keys Endpoint Api V1 Api Keys Get",
+                  "title": "Response Api-Keys List Api Keys Endpoint",
                   "type": "array"
                 }
               }
@@ -16172,10 +16384,13 @@
             "description": "Successful Response"
           }
         },
-        "summary": "List Api Keys Endpoint"
+        "summary": "List Api Keys Endpoint",
+        "tags": [
+          "api-keys"
+        ]
       },
       "post": {
-        "operationId": "create_api_key_endpoint_api_v1_api_keys_post",
+        "operationId": "api-keys_create_api_key_endpoint",
         "requestBody": {
           "content": {
             "application/json": {
@@ -16208,12 +16423,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Create Api Key Endpoint"
+        "summary": "Create Api Key Endpoint",
+        "tags": [
+          "api-keys"
+        ]
       }
     },
     "/api/v1/api-keys/{key_id}": {
       "delete": {
-        "operationId": "revoke_api_key_endpoint_api_v1_api_keys__key_id__delete",
+        "operationId": "api-keys_revoke_api_key_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -16233,7 +16451,7 @@
                   "additionalProperties": {
                     "type": "string"
                   },
-                  "title": "Response Revoke Api Key Endpoint Api V1 Api Keys  Key Id  Delete",
+                  "title": "Response Api-Keys Revoke Api Key Endpoint",
                   "type": "object"
                 }
               }
@@ -16251,12 +16469,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Revoke Api Key Endpoint"
+        "summary": "Revoke Api Key Endpoint",
+        "tags": [
+          "api-keys"
+        ]
       }
     },
     "/api/v1/api-keys/{key_id}/reveal": {
       "get": {
-        "operationId": "reveal_api_key_endpoint_api_v1_api_keys__key_id__reveal_get",
+        "operationId": "api-keys_reveal_api_key_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -16290,12 +16511,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Reveal Api Key Endpoint"
+        "summary": "Reveal Api Key Endpoint",
+        "tags": [
+          "api-keys"
+        ]
       }
     },
     "/api/v1/audit": {
       "get": {
-        "operationId": "list_audit_api_v1_audit_get",
+        "operationId": "audit_list_audit",
         "parameters": [
           {
             "in": "query",
@@ -16348,7 +16572,7 @@
                   "items": {
                     "$ref": "#/components/schemas/AuditEntryView"
                   },
-                  "title": "Response List Audit Api V1 Audit Get",
+                  "title": "Response Audit List Audit",
                   "type": "array"
                 }
               }
@@ -16374,7 +16598,7 @@
     },
     "/api/v1/authz/access/check": {
       "post": {
-        "operationId": "check_access_api_v1_authz_access_check_post",
+        "operationId": "authz_check_access",
         "requestBody": {
           "content": {
             "application/json": {
@@ -16391,7 +16615,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Check Access Api V1 Authz Access Check Post",
+                  "title": "Response Authz Check Access",
                   "type": "object"
                 }
               }
@@ -16409,12 +16633,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Check Access"
+        "summary": "Check Access",
+        "tags": [
+          "authz"
+        ]
       }
     },
     "/api/v1/authz/agents": {
       "get": {
-        "operationId": "list_agents_api_v1_authz_agents_get",
+        "operationId": "authz_list_agents",
         "responses": {
           "200": {
             "content": {
@@ -16424,7 +16651,7 @@
                     "additionalProperties": true,
                     "type": "object"
                   },
-                  "title": "Response List Agents Api V1 Authz Agents Get",
+                  "title": "Response Authz List Agents",
                   "type": "array"
                 }
               }
@@ -16432,12 +16659,15 @@
             "description": "Successful Response"
           }
         },
-        "summary": "List Agents"
+        "summary": "List Agents",
+        "tags": [
+          "authz"
+        ]
       }
     },
     "/api/v1/authz/agents/{agent_id}/roles": {
       "put": {
-        "operationId": "set_agent_roles_api_v1_authz_agents__agent_id__roles_put",
+        "operationId": "authz_set_agent_roles",
         "parameters": [
           {
             "in": "path",
@@ -16465,7 +16695,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Set Agent Roles Api V1 Authz Agents  Agent Id  Roles Put",
+                  "title": "Response Authz Set Agent Roles",
                   "type": "object"
                 }
               }
@@ -16483,12 +16713,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Set Agent Roles"
+        "summary": "Set Agent Roles",
+        "tags": [
+          "authz"
+        ]
       }
     },
     "/api/v1/authz/capabilities": {
       "get": {
-        "operationId": "list_capabilities_api_v1_authz_capabilities_get",
+        "operationId": "authz_list_capabilities",
         "responses": {
           "200": {
             "content": {
@@ -16498,7 +16731,7 @@
                     "additionalProperties": true,
                     "type": "object"
                   },
-                  "title": "Response List Capabilities Api V1 Authz Capabilities Get",
+                  "title": "Response Authz List Capabilities",
                   "type": "array"
                 }
               }
@@ -16506,12 +16739,15 @@
             "description": "Successful Response"
           }
         },
-        "summary": "List Capabilities"
+        "summary": "List Capabilities",
+        "tags": [
+          "authz"
+        ]
       }
     },
     "/api/v1/authz/grants": {
       "get": {
-        "operationId": "list_grants_api_v1_authz_grants_get",
+        "operationId": "authz_list_grants",
         "parameters": [
           {
             "in": "query",
@@ -16539,7 +16775,7 @@
                     "additionalProperties": true,
                     "type": "object"
                   },
-                  "title": "Response List Grants Api V1 Authz Grants Get",
+                  "title": "Response Authz List Grants",
                   "type": "array"
                 }
               }
@@ -16557,10 +16793,13 @@
             "description": "Validation Error"
           }
         },
-        "summary": "List Grants"
+        "summary": "List Grants",
+        "tags": [
+          "authz"
+        ]
       },
       "post": {
-        "operationId": "create_grant_api_v1_authz_grants_post",
+        "operationId": "authz_create_grant",
         "requestBody": {
           "content": {
             "application/json": {
@@ -16577,7 +16816,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Create Grant Api V1 Authz Grants Post",
+                  "title": "Response Authz Create Grant",
                   "type": "object"
                 }
               }
@@ -16595,12 +16834,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Create Grant"
+        "summary": "Create Grant",
+        "tags": [
+          "authz"
+        ]
       }
     },
     "/api/v1/authz/grants/{grant_id}": {
       "delete": {
-        "operationId": "delete_grant_api_v1_authz_grants__grant_id__delete",
+        "operationId": "authz_delete_grant",
         "parameters": [
           {
             "in": "path",
@@ -16627,10 +16869,13 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Delete Grant"
+        "summary": "Delete Grant",
+        "tags": [
+          "authz"
+        ]
       },
       "patch": {
-        "operationId": "update_grant_api_v1_authz_grants__grant_id__patch",
+        "operationId": "authz_update_grant",
         "parameters": [
           {
             "in": "path",
@@ -16658,7 +16903,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Update Grant Api V1 Authz Grants  Grant Id  Patch",
+                  "title": "Response Authz Update Grant",
                   "type": "object"
                 }
               }
@@ -16676,12 +16921,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Update Grant"
+        "summary": "Update Grant",
+        "tags": [
+          "authz"
+        ]
       }
     },
     "/api/v1/authz/members": {
       "get": {
-        "operationId": "list_members_api_v1_authz_members_get",
+        "operationId": "authz_list_members",
         "responses": {
           "200": {
             "content": {
@@ -16691,7 +16939,7 @@
                     "additionalProperties": true,
                     "type": "object"
                   },
-                  "title": "Response List Members Api V1 Authz Members Get",
+                  "title": "Response Authz List Members",
                   "type": "array"
                 }
               }
@@ -16699,12 +16947,15 @@
             "description": "Successful Response"
           }
         },
-        "summary": "List Members"
+        "summary": "List Members",
+        "tags": [
+          "authz"
+        ]
       }
     },
     "/api/v1/authz/members/{principal_id}/attributes": {
       "put": {
-        "operationId": "set_member_attributes_api_v1_authz_members__principal_id__attributes_put",
+        "operationId": "authz_set_member_attributes",
         "parameters": [
           {
             "in": "path",
@@ -16732,7 +16983,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Set Member Attributes Api V1 Authz Members  Principal Id  Attributes Put",
+                  "title": "Response Authz Set Member Attributes",
                   "type": "object"
                 }
               }
@@ -16750,12 +17001,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Set Member Attributes"
+        "summary": "Set Member Attributes",
+        "tags": [
+          "authz"
+        ]
       }
     },
     "/api/v1/authz/members/{principal_id}/roles": {
       "put": {
-        "operationId": "set_member_roles_api_v1_authz_members__principal_id__roles_put",
+        "operationId": "authz_set_member_roles",
         "parameters": [
           {
             "in": "path",
@@ -16783,7 +17037,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Set Member Roles Api V1 Authz Members  Principal Id  Roles Put",
+                  "title": "Response Authz Set Member Roles",
                   "type": "object"
                 }
               }
@@ -16801,12 +17055,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Set Member Roles"
+        "summary": "Set Member Roles",
+        "tags": [
+          "authz"
+        ]
       }
     },
     "/api/v1/authz/policies": {
       "get": {
-        "operationId": "list_policies_api_v1_authz_policies_get",
+        "operationId": "authz_list_policies",
         "responses": {
           "200": {
             "content": {
@@ -16816,7 +17073,7 @@
                     "additionalProperties": true,
                     "type": "object"
                   },
-                  "title": "Response List Policies Api V1 Authz Policies Get",
+                  "title": "Response Authz List Policies",
                   "type": "array"
                 }
               }
@@ -16824,10 +17081,13 @@
             "description": "Successful Response"
           }
         },
-        "summary": "List Policies"
+        "summary": "List Policies",
+        "tags": [
+          "authz"
+        ]
       },
       "post": {
-        "operationId": "create_policy_api_v1_authz_policies_post",
+        "operationId": "authz_create_policy",
         "requestBody": {
           "content": {
             "application/json": {
@@ -16844,7 +17104,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Create Policy Api V1 Authz Policies Post",
+                  "title": "Response Authz Create Policy",
                   "type": "object"
                 }
               }
@@ -16862,12 +17122,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Create Policy"
+        "summary": "Create Policy",
+        "tags": [
+          "authz"
+        ]
       }
     },
     "/api/v1/authz/policies/{policy_id}": {
       "delete": {
-        "operationId": "delete_policy_api_v1_authz_policies__policy_id__delete",
+        "operationId": "authz_delete_policy",
         "parameters": [
           {
             "in": "path",
@@ -16894,10 +17157,13 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Delete Policy"
+        "summary": "Delete Policy",
+        "tags": [
+          "authz"
+        ]
       },
       "patch": {
-        "operationId": "update_policy_api_v1_authz_policies__policy_id__patch",
+        "operationId": "authz_update_policy",
         "parameters": [
           {
             "in": "path",
@@ -16925,7 +17191,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Update Policy Api V1 Authz Policies  Policy Id  Patch",
+                  "title": "Response Authz Update Policy",
                   "type": "object"
                 }
               }
@@ -16943,12 +17209,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Update Policy"
+        "summary": "Update Policy",
+        "tags": [
+          "authz"
+        ]
       }
     },
     "/api/v1/authz/principals": {
       "get": {
-        "operationId": "list_principals_api_v1_authz_principals_get",
+        "operationId": "authz_list_principals",
         "responses": {
           "200": {
             "content": {
@@ -16958,7 +17227,7 @@
                     "additionalProperties": true,
                     "type": "object"
                   },
-                  "title": "Response List Principals Api V1 Authz Principals Get",
+                  "title": "Response Authz List Principals",
                   "type": "array"
                 }
               }
@@ -16966,12 +17235,15 @@
             "description": "Successful Response"
           }
         },
-        "summary": "List Principals"
+        "summary": "List Principals",
+        "tags": [
+          "authz"
+        ]
       }
     },
     "/api/v1/authz/principals/{principal_id}/effective-access": {
       "get": {
-        "operationId": "effective_access_api_v1_authz_principals__principal_id__effective_access_get",
+        "operationId": "authz_effective_access",
         "parameters": [
           {
             "in": "path",
@@ -16992,7 +17264,7 @@
                     "additionalProperties": true,
                     "type": "object"
                   },
-                  "title": "Response Effective Access Api V1 Authz Principals  Principal Id  Effective Access Get",
+                  "title": "Response Authz Effective Access",
                   "type": "array"
                 }
               }
@@ -17010,12 +17282,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Effective Access"
+        "summary": "Effective Access",
+        "tags": [
+          "authz"
+        ]
       }
     },
     "/api/v1/authz/resource-types": {
       "get": {
-        "operationId": "list_resource_types_api_v1_authz_resource_types_get",
+        "operationId": "authz_list_resource_types",
         "responses": {
           "200": {
             "content": {
@@ -17025,7 +17300,7 @@
                     "additionalProperties": true,
                     "type": "object"
                   },
-                  "title": "Response List Resource Types Api V1 Authz Resource Types Get",
+                  "title": "Response Authz List Resource Types",
                   "type": "array"
                 }
               }
@@ -17033,12 +17308,15 @@
             "description": "Successful Response"
           }
         },
-        "summary": "List Resource Types"
+        "summary": "List Resource Types",
+        "tags": [
+          "authz"
+        ]
       }
     },
     "/api/v1/authz/roles": {
       "get": {
-        "operationId": "list_roles_api_v1_authz_roles_get",
+        "operationId": "authz_list_roles",
         "responses": {
           "200": {
             "content": {
@@ -17048,7 +17326,7 @@
                     "additionalProperties": true,
                     "type": "object"
                   },
-                  "title": "Response List Roles Api V1 Authz Roles Get",
+                  "title": "Response Authz List Roles",
                   "type": "array"
                 }
               }
@@ -17056,10 +17334,13 @@
             "description": "Successful Response"
           }
         },
-        "summary": "List Roles"
+        "summary": "List Roles",
+        "tags": [
+          "authz"
+        ]
       },
       "post": {
-        "operationId": "create_role_api_v1_authz_roles_post",
+        "operationId": "authz_create_role",
         "requestBody": {
           "content": {
             "application/json": {
@@ -17076,7 +17357,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Create Role Api V1 Authz Roles Post",
+                  "title": "Response Authz Create Role",
                   "type": "object"
                 }
               }
@@ -17094,12 +17375,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Create Role"
+        "summary": "Create Role",
+        "tags": [
+          "authz"
+        ]
       }
     },
     "/api/v1/authz/roles/{role_id}": {
       "delete": {
-        "operationId": "delete_role_api_v1_authz_roles__role_id__delete",
+        "operationId": "authz_delete_role",
         "parameters": [
           {
             "in": "path",
@@ -17126,10 +17410,13 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Delete Role"
+        "summary": "Delete Role",
+        "tags": [
+          "authz"
+        ]
       },
       "patch": {
-        "operationId": "update_role_api_v1_authz_roles__role_id__patch",
+        "operationId": "authz_update_role",
         "parameters": [
           {
             "in": "path",
@@ -17157,7 +17444,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Update Role Api V1 Authz Roles  Role Id  Patch",
+                  "title": "Response Authz Update Role",
                   "type": "object"
                 }
               }
@@ -17175,12 +17462,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Update Role"
+        "summary": "Update Role",
+        "tags": [
+          "authz"
+        ]
       }
     },
     "/api/v1/authz/service-accounts": {
       "get": {
-        "operationId": "list_service_accounts_api_v1_authz_service_accounts_get",
+        "operationId": "authz_list_service_accounts",
         "responses": {
           "200": {
             "content": {
@@ -17190,7 +17480,7 @@
                     "additionalProperties": true,
                     "type": "object"
                   },
-                  "title": "Response List Service Accounts Api V1 Authz Service Accounts Get",
+                  "title": "Response Authz List Service Accounts",
                   "type": "array"
                 }
               }
@@ -17198,12 +17488,15 @@
             "description": "Successful Response"
           }
         },
-        "summary": "List Service Accounts"
+        "summary": "List Service Accounts",
+        "tags": [
+          "authz"
+        ]
       }
     },
     "/api/v1/authz/service-accounts/{principal_id}/attributes": {
       "put": {
-        "operationId": "set_service_account_attributes_api_v1_authz_service_accounts__principal_id__attributes_put",
+        "operationId": "authz_set_service_account_attributes",
         "parameters": [
           {
             "in": "path",
@@ -17231,7 +17524,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Set Service Account Attributes Api V1 Authz Service Accounts  Principal Id  Attributes Put",
+                  "title": "Response Authz Set Service Account Attributes",
                   "type": "object"
                 }
               }
@@ -17249,12 +17542,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Set Service Account Attributes"
+        "summary": "Set Service Account Attributes",
+        "tags": [
+          "authz"
+        ]
       }
     },
     "/api/v1/authz/service-accounts/{principal_id}/roles": {
       "put": {
-        "operationId": "set_service_account_roles_api_v1_authz_service_accounts__principal_id__roles_put",
+        "operationId": "authz_set_service_account_roles",
         "parameters": [
           {
             "in": "path",
@@ -17282,7 +17578,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Set Service Account Roles Api V1 Authz Service Accounts  Principal Id  Roles Put",
+                  "title": "Response Authz Set Service Account Roles",
                   "type": "object"
                 }
               }
@@ -17300,12 +17596,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Set Service Account Roles"
+        "summary": "Set Service Account Roles",
+        "tags": [
+          "authz"
+        ]
       }
     },
     "/api/v1/channels": {
       "get": {
-        "operationId": "list_channels_endpoint_api_v1_channels_get",
+        "operationId": "channels_list_channels_endpoint",
         "responses": {
           "200": {
             "content": {
@@ -17315,7 +17614,7 @@
                     "additionalProperties": true,
                     "type": "object"
                   },
-                  "title": "Response List Channels Endpoint Api V1 Channels Get",
+                  "title": "Response Channels List Channels Endpoint",
                   "type": "array"
                 }
               }
@@ -17329,7 +17628,7 @@
         ]
       },
       "post": {
-        "operationId": "create_channel_endpoint_api_v1_channels_post",
+        "operationId": "channels_create_channel_endpoint",
         "requestBody": {
           "content": {
             "application/json": {
@@ -17346,7 +17645,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Create Channel Endpoint Api V1 Channels Post",
+                  "title": "Response Channels Create Channel Endpoint",
                   "type": "object"
                 }
               }
@@ -17372,7 +17671,7 @@
     },
     "/api/v1/channels/{channel_id}": {
       "delete": {
-        "operationId": "delete_channel_endpoint_api_v1_channels__channel_id__delete",
+        "operationId": "channels_delete_channel_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -17405,7 +17704,7 @@
         ]
       },
       "get": {
-        "operationId": "get_channel_endpoint_api_v1_channels__channel_id__get",
+        "operationId": "channels_get_channel_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -17423,7 +17722,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Get Channel Endpoint Api V1 Channels  Channel Id  Get",
+                  "title": "Response Channels Get Channel Endpoint",
                   "type": "object"
                 }
               }
@@ -17447,7 +17746,7 @@
         ]
       },
       "patch": {
-        "operationId": "update_channel_endpoint_api_v1_channels__channel_id__patch",
+        "operationId": "channels_update_channel_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -17475,7 +17774,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Update Channel Endpoint Api V1 Channels  Channel Id  Patch",
+                  "title": "Response Channels Update Channel Endpoint",
                   "type": "object"
                 }
               }
@@ -17501,7 +17800,7 @@
     },
     "/api/v1/channels/{channel_id}/pause": {
       "post": {
-        "operationId": "pause_channel_endpoint_api_v1_channels__channel_id__pause_post",
+        "operationId": "channels_pause_channel_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -17519,7 +17818,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Pause Channel Endpoint Api V1 Channels  Channel Id  Pause Post",
+                  "title": "Response Channels Pause Channel Endpoint",
                   "type": "object"
                 }
               }
@@ -17545,7 +17844,7 @@
     },
     "/api/v1/channels/{channel_id}/resume": {
       "post": {
-        "operationId": "resume_channel_endpoint_api_v1_channels__channel_id__resume_post",
+        "operationId": "channels_resume_channel_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -17563,7 +17862,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Resume Channel Endpoint Api V1 Channels  Channel Id  Resume Post",
+                  "title": "Response Channels Resume Channel Endpoint",
                   "type": "object"
                 }
               }
@@ -17589,7 +17888,7 @@
     },
     "/api/v1/channels/{channel_id}/routes": {
       "get": {
-        "operationId": "list_routes_endpoint_api_v1_channels__channel_id__routes_get",
+        "operationId": "channels_list_routes_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -17610,7 +17909,7 @@
                     "additionalProperties": true,
                     "type": "object"
                   },
-                  "title": "Response List Routes Endpoint Api V1 Channels  Channel Id  Routes Get",
+                  "title": "Response Channels List Routes Endpoint",
                   "type": "array"
                 }
               }
@@ -17634,7 +17933,7 @@
         ]
       },
       "post": {
-        "operationId": "add_route_endpoint_api_v1_channels__channel_id__routes_post",
+        "operationId": "channels_add_route_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -17662,7 +17961,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Add Route Endpoint Api V1 Channels  Channel Id  Routes Post",
+                  "title": "Response Channels Add Route Endpoint",
                   "type": "object"
                 }
               }
@@ -17688,7 +17987,7 @@
     },
     "/api/v1/channels/{channel_id}/routes/{route_id}": {
       "delete": {
-        "operationId": "delete_route_endpoint_api_v1_channels__channel_id__routes__route_id__delete",
+        "operationId": "channels_delete_route_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -17730,7 +18029,7 @@
         ]
       },
       "patch": {
-        "operationId": "update_route_endpoint_api_v1_channels__channel_id__routes__route_id__patch",
+        "operationId": "channels_update_route_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -17767,7 +18066,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Update Route Endpoint Api V1 Channels  Channel Id  Routes  Route Id  Patch",
+                  "title": "Response Channels Update Route Endpoint",
                   "type": "object"
                 }
               }
@@ -17793,7 +18092,7 @@
     },
     "/api/v1/credentials": {
       "get": {
-        "operationId": "list_credentials_api_v1_credentials_get",
+        "operationId": "credentials_list_credentials",
         "responses": {
           "200": {
             "content": {
@@ -17802,7 +18101,7 @@
                   "items": {
                     "$ref": "#/components/schemas/CredentialMetadata"
                   },
-                  "title": "Response List Credentials Api V1 Credentials Get",
+                  "title": "Response Credentials List Credentials",
                   "type": "array"
                 }
               }
@@ -17816,7 +18115,7 @@
         ]
       },
       "post": {
-        "operationId": "create_credential_api_v1_credentials_post",
+        "operationId": "credentials_create_credential",
         "requestBody": {
           "content": {
             "application/json": {
@@ -17857,7 +18156,7 @@
     },
     "/api/v1/credentials/by-agent/{agent_id}": {
       "get": {
-        "operationId": "list_credentials_for_agent_api_v1_credentials_by_agent__agent_id__get",
+        "operationId": "credentials_list_credentials_for_agent",
         "parameters": [
           {
             "in": "path",
@@ -17877,7 +18176,7 @@
                   "items": {
                     "$ref": "#/components/schemas/CredentialMetadata"
                   },
-                  "title": "Response List Credentials For Agent Api V1 Credentials By Agent  Agent Id  Get",
+                  "title": "Response Credentials List Credentials For Agent",
                   "type": "array"
                 }
               }
@@ -17903,7 +18202,7 @@
     },
     "/api/v1/credentials/{credential_id}": {
       "delete": {
-        "operationId": "delete_credential_api_v1_credentials__credential_id__delete",
+        "operationId": "credentials_delete_credential",
         "parameters": [
           {
             "in": "path",
@@ -17936,7 +18235,7 @@
         ]
       },
       "get": {
-        "operationId": "get_credential_api_v1_credentials__credential_id__get",
+        "operationId": "credentials_get_credential",
         "parameters": [
           {
             "in": "path",
@@ -17976,7 +18275,7 @@
         ]
       },
       "patch": {
-        "operationId": "update_credential_metadata_api_v1_credentials__credential_id__patch",
+        "operationId": "credentials_update_credential_metadata",
         "parameters": [
           {
             "in": "path",
@@ -18028,7 +18327,7 @@
     },
     "/api/v1/credentials/{credential_id}/bindings": {
       "get": {
-        "operationId": "list_credential_bindings_api_v1_credentials__credential_id__bindings_get",
+        "operationId": "credentials_list_credential_bindings",
         "parameters": [
           {
             "in": "path",
@@ -18048,7 +18347,7 @@
                   "items": {
                     "$ref": "#/components/schemas/CredentialBinding"
                   },
-                  "title": "Response List Credential Bindings Api V1 Credentials  Credential Id  Bindings Get",
+                  "title": "Response Credentials List Credential Bindings",
                   "type": "array"
                 }
               }
@@ -18072,7 +18371,7 @@
         ]
       },
       "post": {
-        "operationId": "bind_credential_api_v1_credentials__credential_id__bindings_post",
+        "operationId": "credentials_bind_credential",
         "parameters": [
           {
             "in": "path",
@@ -18124,7 +18423,7 @@
     },
     "/api/v1/credentials/{credential_id}/bindings/{agent_id}": {
       "delete": {
-        "operationId": "unbind_credential_api_v1_credentials__credential_id__bindings__agent_id__delete",
+        "operationId": "credentials_unbind_credential",
         "parameters": [
           {
             "in": "path",
@@ -18168,7 +18467,7 @@
     },
     "/api/v1/credentials/{credential_id}/value": {
       "put": {
-        "operationId": "replace_credential_value_api_v1_credentials__credential_id__value_put",
+        "operationId": "credentials_replace_credential_value",
         "parameters": [
           {
             "in": "path",
@@ -18221,7 +18520,7 @@
     "/api/v1/gateway/admin/catalog": {
       "get": {
         "description": "Return aggregated upstream tools, optionally filtered by a search query.",
-        "operationId": "list_catalog_api_v1_gateway_admin_catalog_get",
+        "operationId": "gateway-admin_list_catalog",
         "parameters": [
           {
             "description": "Optional full-text search query.",
@@ -18262,7 +18561,7 @@
                   "items": {
                     "$ref": "#/components/schemas/CatalogTool"
                   },
-                  "title": "Response List Catalog Api V1 Gateway Admin Catalog Get",
+                  "title": "Response Gateway-Admin List Catalog",
                   "type": "array"
                 }
               }
@@ -18288,7 +18587,7 @@
     },
     "/api/v1/gateway/admin/groups": {
       "get": {
-        "operationId": "list_groups_api_v1_gateway_admin_groups_get",
+        "operationId": "gateway-admin_list_groups",
         "responses": {
           "200": {
             "content": {
@@ -18297,7 +18596,7 @@
                   "items": {
                     "$ref": "#/components/schemas/GroupRecord"
                   },
-                  "title": "Response List Groups Api V1 Gateway Admin Groups Get",
+                  "title": "Response Gateway-Admin List Groups",
                   "type": "array"
                 }
               }
@@ -18311,7 +18610,7 @@
         ]
       },
       "post": {
-        "operationId": "create_group_api_v1_gateway_admin_groups_post",
+        "operationId": "gateway-admin_create_group",
         "requestBody": {
           "content": {
             "application/json": {
@@ -18352,7 +18651,7 @@
     },
     "/api/v1/gateway/admin/groups/{group_id}": {
       "delete": {
-        "operationId": "delete_group_api_v1_gateway_admin_groups__group_id__delete",
+        "operationId": "gateway-admin_delete_group",
         "parameters": [
           {
             "in": "path",
@@ -18385,7 +18684,7 @@
         ]
       },
       "get": {
-        "operationId": "get_group_api_v1_gateway_admin_groups__group_id__get",
+        "operationId": "gateway-admin_get_group",
         "parameters": [
           {
             "in": "path",
@@ -18425,7 +18724,7 @@
         ]
       },
       "patch": {
-        "operationId": "update_group_api_v1_gateway_admin_groups__group_id__patch",
+        "operationId": "gateway-admin_update_group",
         "parameters": [
           {
             "in": "path",
@@ -18478,7 +18777,7 @@
     "/api/v1/gateway/admin/groups/{group_id}/servers": {
       "put": {
         "description": "Replace a group's server membership (account-scoped).",
-        "operationId": "set_group_servers_api_v1_gateway_admin_groups__group_id__servers_put",
+        "operationId": "gateway-admin_set_group_servers",
         "parameters": [
           {
             "in": "path",
@@ -18534,7 +18833,7 @@
     },
     "/api/v1/gateway/admin/oauth/callback": {
       "post": {
-        "operationId": "oauth_callback_api_v1_gateway_admin_oauth_callback_post",
+        "operationId": "gateway-admin-oauth_oauth_callback",
         "requestBody": {
           "content": {
             "application/json": {
@@ -18575,7 +18874,7 @@
     },
     "/api/v1/gateway/admin/policies": {
       "get": {
-        "operationId": "list_policies_api_v1_gateway_admin_policies_get",
+        "operationId": "gateway-admin_list_policies",
         "responses": {
           "200": {
             "content": {
@@ -18584,7 +18883,7 @@
                   "items": {
                     "$ref": "#/components/schemas/McpPolicyRecord"
                   },
-                  "title": "Response List Policies Api V1 Gateway Admin Policies Get",
+                  "title": "Response Gateway-Admin List Policies",
                   "type": "array"
                 }
               }
@@ -18598,7 +18897,7 @@
         ]
       },
       "post": {
-        "operationId": "create_policy_api_v1_gateway_admin_policies_post",
+        "operationId": "gateway-admin_create_policy",
         "requestBody": {
           "content": {
             "application/json": {
@@ -18639,7 +18938,7 @@
     },
     "/api/v1/gateway/admin/policies/{policy_id}": {
       "delete": {
-        "operationId": "delete_policy_api_v1_gateway_admin_policies__policy_id__delete",
+        "operationId": "gateway-admin_delete_policy",
         "parameters": [
           {
             "in": "path",
@@ -18672,7 +18971,7 @@
         ]
       },
       "patch": {
-        "operationId": "update_policy_api_v1_gateway_admin_policies__policy_id__patch",
+        "operationId": "gateway-admin_update_policy",
         "parameters": [
           {
             "in": "path",
@@ -18724,14 +19023,14 @@
     },
     "/api/v1/gateway/admin/reload": {
       "post": {
-        "operationId": "reload_api_v1_gateway_admin_reload_post",
+        "operationId": "gateway-admin_reload",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Reload Api V1 Gateway Admin Reload Post",
+                  "title": "Response Gateway-Admin Reload",
                   "type": "object"
                 }
               }
@@ -18747,7 +19046,7 @@
     },
     "/api/v1/gateway/admin/server-credentials": {
       "get": {
-        "operationId": "list_server_credentials_api_v1_gateway_admin_server_credentials_get",
+        "operationId": "gateway-admin_list_server_credentials",
         "responses": {
           "200": {
             "content": {
@@ -18756,7 +19055,7 @@
                   "items": {
                     "$ref": "#/components/schemas/McpServerCredentialBinding"
                   },
-                  "title": "Response List Server Credentials Api V1 Gateway Admin Server Credentials Get",
+                  "title": "Response Gateway-Admin List Server Credentials",
                   "type": "array"
                 }
               }
@@ -18772,7 +19071,7 @@
     },
     "/api/v1/gateway/admin/servers": {
       "get": {
-        "operationId": "list_servers_api_v1_gateway_admin_servers_get",
+        "operationId": "gateway-admin_list_servers",
         "responses": {
           "200": {
             "content": {
@@ -18781,7 +19080,7 @@
                   "items": {
                     "$ref": "#/components/schemas/LabeledServerRecord"
                   },
-                  "title": "Response List Servers Api V1 Gateway Admin Servers Get",
+                  "title": "Response Gateway-Admin List Servers",
                   "type": "array"
                 }
               }
@@ -18795,7 +19094,7 @@
         ]
       },
       "post": {
-        "operationId": "create_server_api_v1_gateway_admin_servers_post",
+        "operationId": "gateway-admin_create_server",
         "requestBody": {
           "content": {
             "application/json": {
@@ -18836,7 +19135,7 @@
     },
     "/api/v1/gateway/admin/servers/{server_id}": {
       "delete": {
-        "operationId": "delete_server_api_v1_gateway_admin_servers__server_id__delete",
+        "operationId": "gateway-admin_delete_server",
         "parameters": [
           {
             "in": "path",
@@ -18869,7 +19168,7 @@
         ]
       },
       "get": {
-        "operationId": "get_server_api_v1_gateway_admin_servers__server_id__get",
+        "operationId": "gateway-admin_get_server",
         "parameters": [
           {
             "in": "path",
@@ -18909,7 +19208,7 @@
         ]
       },
       "patch": {
-        "operationId": "update_server_api_v1_gateway_admin_servers__server_id__patch",
+        "operationId": "gateway-admin_update_server",
         "parameters": [
           {
             "in": "path",
@@ -18961,7 +19260,7 @@
     },
     "/api/v1/gateway/admin/servers/{server_id}/credential": {
       "delete": {
-        "operationId": "delete_server_credential_api_v1_gateway_admin_servers__server_id__credential_delete",
+        "operationId": "gateway-admin_delete_server_credential",
         "parameters": [
           {
             "in": "path",
@@ -18994,7 +19293,7 @@
         ]
       },
       "put": {
-        "operationId": "set_server_credential_api_v1_gateway_admin_servers__server_id__credential_put",
+        "operationId": "gateway-admin_set_server_credential",
         "parameters": [
           {
             "in": "path",
@@ -19046,7 +19345,7 @@
     },
     "/api/v1/gateway/admin/servers/{server_id}/oauth/cancel": {
       "post": {
-        "operationId": "cancel_oauth_api_v1_gateway_admin_servers__server_id__oauth_cancel_post",
+        "operationId": "gateway-admin-oauth_cancel_oauth",
         "parameters": [
           {
             "in": "path",
@@ -19088,7 +19387,7 @@
     },
     "/api/v1/gateway/admin/servers/{server_id}/oauth/start": {
       "post": {
-        "operationId": "start_oauth_api_v1_gateway_admin_servers__server_id__oauth_start_post",
+        "operationId": "gateway-admin-oauth_start_oauth",
         "parameters": [
           {
             "in": "path",
@@ -19130,7 +19429,7 @@
     },
     "/api/v1/gateway/admin/servers/{server_id}/oauth/status": {
       "get": {
-        "operationId": "oauth_status_api_v1_gateway_admin_servers__server_id__oauth_status_get",
+        "operationId": "gateway-admin-oauth_oauth_status",
         "parameters": [
           {
             "in": "path",
@@ -19172,7 +19471,7 @@
     },
     "/api/v1/gateway/admin/servers/{server_id}/refresh": {
       "post": {
-        "operationId": "refresh_server_api_v1_gateway_admin_servers__server_id__refresh_post",
+        "operationId": "gateway-admin_refresh_server",
         "parameters": [
           {
             "in": "path",
@@ -19190,7 +19489,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Refresh Server Api V1 Gateway Admin Servers  Server Id  Refresh Post",
+                  "title": "Response Gateway-Admin Refresh Server",
                   "type": "object"
                 }
               }
@@ -19217,7 +19516,7 @@
     "/api/v1/gateway/admin/servers/{server_id}/test": {
       "post": {
         "description": "Connect to the upstream and perform the MCP handshake.",
-        "operationId": "test_server_api_v1_gateway_admin_servers__server_id__test_post",
+        "operationId": "gateway-admin_test_server",
         "parameters": [
           {
             "in": "path",
@@ -19235,7 +19534,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Test Server Api V1 Gateway Admin Servers  Server Id  Test Post",
+                  "title": "Response Gateway-Admin Test Server",
                   "type": "object"
                 }
               }
@@ -19262,7 +19561,7 @@
     "/api/v1/gateway/admin/servers/{server_id}/tools": {
       "get": {
         "description": "Live introspection of an upstream's tools.",
-        "operationId": "list_server_tools_api_v1_gateway_admin_servers__server_id__tools_get",
+        "operationId": "gateway-admin_list_server_tools",
         "parameters": [
           {
             "in": "path",
@@ -19283,7 +19582,7 @@
                     "additionalProperties": true,
                     "type": "object"
                   },
-                  "title": "Response List Server Tools Api V1 Gateway Admin Servers  Server Id  Tools Get",
+                  "title": "Response Gateway-Admin List Server Tools",
                   "type": "array"
                 }
               }
@@ -19309,7 +19608,7 @@
     },
     "/api/v1/grader-configs": {
       "get": {
-        "operationId": "list_grader_configs_endpoint_api_v1_grader_configs_get",
+        "operationId": "grader-configs_list_grader_configs_endpoint",
         "parameters": [
           {
             "in": "query",
@@ -19366,10 +19665,13 @@
             "description": "Validation Error"
           }
         },
-        "summary": "List Grader Configs Endpoint"
+        "summary": "List Grader Configs Endpoint",
+        "tags": [
+          "grader-configs"
+        ]
       },
       "post": {
-        "operationId": "create_grader_config_endpoint_api_v1_grader_configs_post",
+        "operationId": "grader-configs_create_grader_config_endpoint",
         "requestBody": {
           "content": {
             "application/json": {
@@ -19402,12 +19704,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Create Grader Config Endpoint"
+        "summary": "Create Grader Config Endpoint",
+        "tags": [
+          "grader-configs"
+        ]
       }
     },
     "/api/v1/grader-configs/grade-run": {
       "post": {
-        "operationId": "grade_run_endpoint_api_v1_grader_configs_grade_run_post",
+        "operationId": "grader-configs_grade_run_endpoint",
         "requestBody": {
           "content": {
             "application/json": {
@@ -19440,12 +19745,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Grade Run Endpoint"
+        "summary": "Grade Run Endpoint",
+        "tags": [
+          "grader-configs"
+        ]
       }
     },
     "/api/v1/grader-configs/{config_id}": {
       "delete": {
-        "operationId": "delete_grader_config_endpoint_api_v1_grader_configs__config_id__delete",
+        "operationId": "grader-configs_delete_grader_config_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -19472,10 +19780,13 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Delete Grader Config Endpoint"
+        "summary": "Delete Grader Config Endpoint",
+        "tags": [
+          "grader-configs"
+        ]
       },
       "patch": {
-        "operationId": "update_grader_config_endpoint_api_v1_grader_configs__config_id__patch",
+        "operationId": "grader-configs_update_grader_config_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -19519,19 +19830,22 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Update Grader Config Endpoint"
+        "summary": "Update Grader Config Endpoint",
+        "tags": [
+          "grader-configs"
+        ]
       }
     },
     "/api/v1/hooks/events": {
       "post": {
-        "operationId": "hooks_events_rpc_api_v1_hooks_events_post",
+        "operationId": "hooks_hooks_events_rpc",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Hooks Events Rpc Api V1 Hooks Events Post",
+                  "title": "Response Hooks Hooks Events Rpc",
                   "type": "object"
                 }
               }
@@ -19547,7 +19861,7 @@
     },
     "/api/v1/hosted-agents": {
       "get": {
-        "operationId": "list_hosted_agents_api_v1_hosted_agents_get",
+        "operationId": "hosted-agents_list_hosted_agents",
         "responses": {
           "200": {
             "content": {
@@ -19556,7 +19870,7 @@
                   "items": {
                     "$ref": "#/components/schemas/HostedAgentResponse"
                   },
-                  "title": "Response List Hosted Agents Api V1 Hosted Agents Get",
+                  "title": "Response Hosted-Agents List Hosted Agents",
                   "type": "array"
                 }
               }
@@ -19570,7 +19884,7 @@
         ]
       },
       "post": {
-        "operationId": "create_hosted_agent_api_v1_hosted_agents_post",
+        "operationId": "hosted-agents_create_hosted_agent",
         "requestBody": {
           "content": {
             "application/json": {
@@ -19611,7 +19925,7 @@
     },
     "/api/v1/hosted-agents/{customer}/{agent_id}": {
       "delete": {
-        "operationId": "delete_hosted_agent_api_v1_hosted_agents__customer___agent_id__delete",
+        "operationId": "hosted-agents_delete_hosted_agent",
         "parameters": [
           {
             "in": "path",
@@ -19653,7 +19967,7 @@
         ]
       },
       "get": {
-        "operationId": "get_hosted_agent_api_v1_hosted_agents__customer___agent_id__get",
+        "operationId": "hosted-agents_get_hosted_agent",
         "parameters": [
           {
             "in": "path",
@@ -19702,7 +20016,7 @@
         ]
       },
       "put": {
-        "operationId": "update_hosted_agent_api_v1_hosted_agents__customer___agent_id__put",
+        "operationId": "hosted-agents_update_hosted_agent",
         "parameters": [
           {
             "in": "path",
@@ -19763,7 +20077,7 @@
     },
     "/api/v1/insights/issues": {
       "get": {
-        "operationId": "workspace_issues_endpoint_api_v1_insights_issues_get",
+        "operationId": "insights_workspace_issues_endpoint",
         "parameters": [
           {
             "in": "query",
@@ -19798,12 +20112,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Workspace Issues Endpoint"
+        "summary": "Workspace Issues Endpoint",
+        "tags": [
+          "insights"
+        ]
       }
     },
     "/api/v1/insights/recommendation": {
       "post": {
-        "operationId": "save_recommendation_endpoint_api_v1_insights_recommendation_post",
+        "operationId": "insights_save_recommendation_endpoint",
         "requestBody": {
           "content": {
             "application/json": {
@@ -19836,12 +20153,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Save Recommendation Endpoint"
+        "summary": "Save Recommendation Endpoint",
+        "tags": [
+          "insights"
+        ]
       }
     },
     "/api/v1/integrations/catalog": {
       "get": {
-        "operationId": "list_catalog_api_v1_integrations_catalog_get",
+        "operationId": "integrations_list_catalog",
         "responses": {
           "200": {
             "content": {
@@ -19850,7 +20170,7 @@
                   "items": {
                     "$ref": "#/components/schemas/IntegrationCatalogEntry"
                   },
-                  "title": "Response List Catalog Api V1 Integrations Catalog Get",
+                  "title": "Response Integrations List Catalog",
                   "type": "array"
                 }
               }
@@ -19866,7 +20186,7 @@
     },
     "/api/v1/integrations/connections": {
       "get": {
-        "operationId": "list_connections_api_v1_integrations_connections_get",
+        "operationId": "integrations_list_connections",
         "responses": {
           "200": {
             "content": {
@@ -19875,7 +20195,7 @@
                   "items": {
                     "$ref": "#/components/schemas/IntegrationConnection"
                   },
-                  "title": "Response List Connections Api V1 Integrations Connections Get",
+                  "title": "Response Integrations List Connections",
                   "type": "array"
                 }
               }
@@ -19889,7 +20209,7 @@
         ]
       },
       "post": {
-        "operationId": "create_connection_api_v1_integrations_connections_post",
+        "operationId": "integrations_create_connection",
         "requestBody": {
           "content": {
             "application/json": {
@@ -19930,7 +20250,7 @@
     },
     "/api/v1/integrations/connections/app/callback": {
       "get": {
-        "operationId": "integration_app_callback_api_v1_integrations_connections_app_callback_get",
+        "operationId": "integrations_integration_app_callback",
         "parameters": [
           {
             "in": "query",
@@ -19997,7 +20317,7 @@
     },
     "/api/v1/integrations/connections/app/start": {
       "post": {
-        "operationId": "start_app_connection_api_v1_integrations_connections_app_start_post",
+        "operationId": "integrations_start_app_connection",
         "requestBody": {
           "content": {
             "application/json": {
@@ -20038,7 +20358,7 @@
     },
     "/api/v1/integrations/connections/oauth/callback": {
       "get": {
-        "operationId": "integration_oauth_callback_api_v1_integrations_connections_oauth_callback_get",
+        "operationId": "integrations_integration_oauth_callback",
         "parameters": [
           {
             "in": "query",
@@ -20089,7 +20409,7 @@
     },
     "/api/v1/integrations/connections/oauth/start": {
       "post": {
-        "operationId": "start_oauth_connection_api_v1_integrations_connections_oauth_start_post",
+        "operationId": "integrations_start_oauth_connection",
         "requestBody": {
           "content": {
             "application/json": {
@@ -20130,7 +20450,7 @@
     },
     "/api/v1/integrations/connections/{connection_id}": {
       "delete": {
-        "operationId": "delete_connection_api_v1_integrations_connections__connection_id__delete",
+        "operationId": "integrations_delete_connection",
         "parameters": [
           {
             "in": "path",
@@ -20163,7 +20483,7 @@
         ]
       },
       "get": {
-        "operationId": "get_connection_api_v1_integrations_connections__connection_id__get",
+        "operationId": "integrations_get_connection",
         "parameters": [
           {
             "in": "path",
@@ -20205,7 +20525,7 @@
     },
     "/api/v1/integrations/connections/{connection_id}/test": {
       "post": {
-        "operationId": "test_connection_api_v1_integrations_connections__connection_id__test_post",
+        "operationId": "integrations_test_connection",
         "parameters": [
           {
             "in": "path",
@@ -20247,7 +20567,7 @@
     },
     "/api/v1/issues": {
       "get": {
-        "operationId": "list_issues_endpoint_api_v1_issues_get",
+        "operationId": "issues_list_issues_endpoint",
         "parameters": [
           {
             "in": "query",
@@ -20314,12 +20634,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "List Issues Endpoint"
+        "summary": "List Issues Endpoint",
+        "tags": [
+          "issues"
+        ]
       }
     },
     "/api/v1/issues/{issue_id}": {
       "patch": {
-        "operationId": "update_issue_endpoint_api_v1_issues__issue_id__patch",
+        "operationId": "issues_update_issue_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -20363,12 +20686,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Update Issue Endpoint"
+        "summary": "Update Issue Endpoint",
+        "tags": [
+          "issues"
+        ]
       }
     },
     "/api/v1/knowledge-bases": {
       "get": {
-        "operationId": "list_knowledge_bases_api_v1_knowledge_bases_get",
+        "operationId": "knowledge_list_knowledge_bases",
         "responses": {
           "200": {
             "content": {
@@ -20377,7 +20703,7 @@
                   "items": {
                     "$ref": "#/components/schemas/KnowledgeBaseSummary"
                   },
-                  "title": "Response List Knowledge Bases Api V1 Knowledge Bases Get",
+                  "title": "Response Knowledge List Knowledge Bases",
                   "type": "array"
                 }
               }
@@ -20391,7 +20717,7 @@
         ]
       },
       "post": {
-        "operationId": "create_knowledge_base_api_v1_knowledge_bases_post",
+        "operationId": "knowledge_create_knowledge_base",
         "requestBody": {
           "content": {
             "application/json": {
@@ -20432,14 +20758,14 @@
     },
     "/api/v1/knowledge-bases/embedding-status": {
       "get": {
-        "operationId": "get_embedding_status_api_v1_knowledge_bases_embedding_status_get",
+        "operationId": "knowledge_get_embedding_status",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Get Embedding Status Api V1 Knowledge Bases Embedding Status Get",
+                  "title": "Response Knowledge Get Embedding Status",
                   "type": "object"
                 }
               }
@@ -20455,7 +20781,7 @@
     },
     "/api/v1/knowledge-bases/{kb_id}": {
       "delete": {
-        "operationId": "delete_knowledge_base_api_v1_knowledge_bases__kb_id__delete",
+        "operationId": "knowledge_delete_knowledge_base",
         "parameters": [
           {
             "in": "path",
@@ -20488,7 +20814,7 @@
         ]
       },
       "get": {
-        "operationId": "get_knowledge_base_api_v1_knowledge_bases__kb_id__get",
+        "operationId": "knowledge_get_knowledge_base",
         "parameters": [
           {
             "in": "path",
@@ -20528,7 +20854,7 @@
         ]
       },
       "patch": {
-        "operationId": "update_knowledge_base_api_v1_knowledge_bases__kb_id__patch",
+        "operationId": "knowledge_update_knowledge_base",
         "parameters": [
           {
             "in": "path",
@@ -20580,7 +20906,7 @@
     },
     "/api/v1/knowledge-bases/{kb_id}/agents": {
       "get": {
-        "operationId": "list_agent_grants_api_v1_knowledge_bases__kb_id__agents_get",
+        "operationId": "knowledge_list_agent_grants",
         "parameters": [
           {
             "in": "path",
@@ -20600,7 +20926,7 @@
                   "items": {
                     "$ref": "#/components/schemas/KBAgentGrant"
                   },
-                  "title": "Response List Agent Grants Api V1 Knowledge Bases  Kb Id  Agents Get",
+                  "title": "Response Knowledge List Agent Grants",
                   "type": "array"
                 }
               }
@@ -20624,7 +20950,7 @@
         ]
       },
       "post": {
-        "operationId": "attach_agent_api_v1_knowledge_bases__kb_id__agents_post",
+        "operationId": "knowledge_attach_agent",
         "parameters": [
           {
             "in": "path",
@@ -20676,7 +21002,7 @@
     },
     "/api/v1/knowledge-bases/{kb_id}/agents/{agent_id}": {
       "delete": {
-        "operationId": "revoke_agent_api_v1_knowledge_bases__kb_id__agents__agent_id__delete",
+        "operationId": "knowledge_revoke_agent",
         "parameters": [
           {
             "in": "path",
@@ -20720,7 +21046,7 @@
     },
     "/api/v1/knowledge-bases/{kb_id}/documents": {
       "get": {
-        "operationId": "list_documents_api_v1_knowledge_bases__kb_id__documents_get",
+        "operationId": "knowledge_list_documents",
         "parameters": [
           {
             "in": "path",
@@ -20772,7 +21098,7 @@
                   "items": {
                     "$ref": "#/components/schemas/KBDocumentSummary"
                   },
-                  "title": "Response List Documents Api V1 Knowledge Bases  Kb Id  Documents Get",
+                  "title": "Response Knowledge List Documents",
                   "type": "array"
                 }
               }
@@ -20796,7 +21122,7 @@
         ]
       },
       "post": {
-        "operationId": "upload_document_api_v1_knowledge_bases__kb_id__documents_post",
+        "operationId": "knowledge_upload_document",
         "parameters": [
           {
             "in": "path",
@@ -20812,7 +21138,7 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/Body_upload_document_api_v1_knowledge_bases__kb_id__documents_post"
+                "$ref": "#/components/schemas/Body_knowledge_upload_document"
               }
             }
           },
@@ -20848,7 +21174,7 @@
     },
     "/api/v1/knowledge-bases/{kb_id}/documents/{doc_id}": {
       "delete": {
-        "operationId": "delete_document_api_v1_knowledge_bases__kb_id__documents__doc_id__delete",
+        "operationId": "knowledge_delete_document",
         "parameters": [
           {
             "in": "path",
@@ -20890,7 +21216,7 @@
         ]
       },
       "get": {
-        "operationId": "get_document_api_v1_knowledge_bases__kb_id__documents__doc_id__get",
+        "operationId": "knowledge_get_document",
         "parameters": [
           {
             "in": "path",
@@ -20941,7 +21267,7 @@
     },
     "/api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/reindex": {
       "post": {
-        "operationId": "reindex_document_api_v1_knowledge_bases__kb_id__documents__doc_id__reindex_post",
+        "operationId": "knowledge_reindex_document",
         "parameters": [
           {
             "in": "path",
@@ -20992,7 +21318,7 @@
     },
     "/api/v1/knowledge-bases/{kb_id}/search": {
       "post": {
-        "operationId": "search_knowledge_api_v1_knowledge_bases__kb_id__search_post",
+        "operationId": "knowledge_search_knowledge",
         "parameters": [
           {
             "in": "path",
@@ -21044,7 +21370,7 @@
     },
     "/api/v1/llm-usage": {
       "get": {
-        "operationId": "get_llm_usage_api_v1_llm_usage_get",
+        "operationId": "llm-usage_get_llm_usage",
         "responses": {
           "200": {
             "content": {
@@ -21065,7 +21391,7 @@
     },
     "/api/v1/quality/agents": {
       "get": {
-        "operationId": "agent_quality_api_v1_quality_agents_get",
+        "operationId": "quality_agent_quality",
         "parameters": [
           {
             "in": "query",
@@ -21088,7 +21414,7 @@
                   "items": {
                     "$ref": "#/components/schemas/AgentQualityRollup"
                   },
-                  "title": "Response Agent Quality Api V1 Quality Agents Get",
+                  "title": "Response Quality Agent Quality",
                   "type": "array"
                 }
               }
@@ -21106,12 +21432,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Agent Quality"
+        "summary": "Agent Quality",
+        "tags": [
+          "quality"
+        ]
       }
     },
     "/api/v1/quality/agents/{agent_id}/auto-scores": {
       "get": {
-        "operationId": "agent_auto_score_series_api_v1_quality_agents__agent_id__auto_scores_get",
+        "operationId": "quality_agent_auto_score_series",
         "parameters": [
           {
             "in": "path",
@@ -21157,12 +21486,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Agent Auto Score Series"
+        "summary": "Agent Auto Score Series",
+        "tags": [
+          "quality"
+        ]
       }
     },
     "/api/v1/quality/agents/{agent_id}/runs": {
       "get": {
-        "operationId": "agent_run_quality_api_v1_quality_agents__agent_id__runs_get",
+        "operationId": "quality_agent_run_quality",
         "parameters": [
           {
             "in": "path",
@@ -21209,7 +21541,7 @@
                   "items": {
                     "$ref": "#/components/schemas/RunQualityRow"
                   },
-                  "title": "Response Agent Run Quality Api V1 Quality Agents  Agent Id  Runs Get",
+                  "title": "Response Quality Agent Run Quality",
                   "type": "array"
                 }
               }
@@ -21227,12 +21559,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Agent Run Quality"
+        "summary": "Agent Run Quality",
+        "tags": [
+          "quality"
+        ]
       }
     },
     "/api/v1/quality/queue": {
       "get": {
-        "operationId": "ungraded_queue_api_v1_quality_queue_get",
+        "operationId": "quality_ungraded_queue",
         "parameters": [
           {
             "in": "query",
@@ -21269,12 +21604,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Ungraded Queue"
+        "summary": "Ungraded Queue",
+        "tags": [
+          "quality"
+        ]
       }
     },
     "/api/v1/quality/skills": {
       "get": {
-        "operationId": "skill_quality_api_v1_quality_skills_get",
+        "operationId": "quality_skill_quality",
         "parameters": [
           {
             "in": "query",
@@ -21297,7 +21635,7 @@
                   "items": {
                     "$ref": "#/components/schemas/SkillQualityRollup"
                   },
-                  "title": "Response Skill Quality Api V1 Quality Skills Get",
+                  "title": "Response Quality Skill Quality",
                   "type": "array"
                 }
               }
@@ -21315,13 +21653,16 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Skill Quality"
+        "summary": "Skill Quality",
+        "tags": [
+          "quality"
+        ]
       }
     },
     "/api/v1/runs": {
       "get": {
         "description": "Latest `limit` runs newest-first (optionally scoped to one ``agent_id``), or \u2014 with\n?thread_id \u2014 the full continuation chain for one thread, oldest-first.",
-        "operationId": "list_history_api_v1_runs_get",
+        "operationId": "runs_list_history",
         "parameters": [
           {
             "in": "query",
@@ -21376,7 +21717,7 @@
                   "items": {
                     "$ref": "#/components/schemas/RunSummary"
                   },
-                  "title": "Response List History Api V1 Runs Get",
+                  "title": "Response Runs List History",
                   "type": "array"
                 }
               }
@@ -21400,7 +21741,7 @@
         ]
       },
       "post": {
-        "operationId": "create_api_v1_runs_post",
+        "operationId": "runs_create",
         "parameters": [
           {
             "in": "header",
@@ -21459,7 +21800,7 @@
     },
     "/api/v1/runs/activity/agents/{agent_id}": {
       "get": {
-        "operationId": "agent_activity_api_v1_runs_activity_agents__agent_id__get",
+        "operationId": "runs_agent_activity",
         "parameters": [
           {
             "in": "path",
@@ -21511,7 +21852,7 @@
     },
     "/api/v1/runs/activity/workspace": {
       "get": {
-        "operationId": "workspace_activity_api_v1_runs_activity_workspace_get",
+        "operationId": "runs_workspace_activity",
         "parameters": [
           {
             "in": "query",
@@ -21554,7 +21895,7 @@
     },
     "/api/v1/runs/start-direct": {
       "post": {
-        "operationId": "start_direct_api_v1_runs_start_direct_post",
+        "operationId": "runs_start_direct",
         "requestBody": {
           "content": {
             "application/json": {
@@ -21595,7 +21936,7 @@
     },
     "/api/v1/runs/{run_id}": {
       "get": {
-        "operationId": "get_detail_api_v1_runs__run_id__get",
+        "operationId": "runs_get_detail",
         "parameters": [
           {
             "in": "path",
@@ -21637,7 +21978,7 @@
     },
     "/api/v1/runs/{run_id}/artifacts": {
       "get": {
-        "operationId": "list_run_artifacts_api_v1_runs__run_id__artifacts_get",
+        "operationId": "runs_list_run_artifacts",
         "parameters": [
           {
             "in": "path",
@@ -21657,7 +21998,7 @@
                   "items": {
                     "$ref": "#/components/schemas/ArtifactSummary"
                   },
-                  "title": "Response List Run Artifacts Api V1 Runs  Run Id  Artifacts Get",
+                  "title": "Response Runs List Run Artifacts",
                   "type": "array"
                 }
               }
@@ -21681,7 +22022,7 @@
         ]
       },
       "post": {
-        "operationId": "create_run_artifact_api_v1_runs__run_id__artifacts_post",
+        "operationId": "runs_create_run_artifact",
         "parameters": [
           {
             "in": "path",
@@ -21733,7 +22074,7 @@
     },
     "/api/v1/runs/{run_id}/artifacts/{artifact_id}": {
       "get": {
-        "operationId": "get_run_artifact_api_v1_runs__run_id__artifacts__artifact_id__get",
+        "operationId": "runs_get_run_artifact",
         "parameters": [
           {
             "in": "path",
@@ -21782,7 +22123,7 @@
         ]
       },
       "put": {
-        "operationId": "update_run_artifact_api_v1_runs__run_id__artifacts__artifact_id__put",
+        "operationId": "runs_update_run_artifact",
         "parameters": [
           {
             "in": "path",
@@ -21843,7 +22184,7 @@
     },
     "/api/v1/runs/{run_id}/complete": {
       "post": {
-        "operationId": "complete_api_v1_runs__run_id__complete_post",
+        "operationId": "runs_complete",
         "parameters": [
           {
             "in": "path",
@@ -21895,7 +22236,7 @@
     },
     "/api/v1/runs/{run_id}/events": {
       "post": {
-        "operationId": "ingest_events_api_v1_runs__run_id__events_post",
+        "operationId": "runs_ingest_events",
         "parameters": [
           {
             "in": "path",
@@ -21947,7 +22288,7 @@
     },
     "/api/v1/runs/{run_id}/fail": {
       "post": {
-        "operationId": "fail_api_v1_runs__run_id__fail_post",
+        "operationId": "runs_fail",
         "parameters": [
           {
             "in": "path",
@@ -21999,7 +22340,7 @@
     },
     "/api/v1/runs/{run_id}/messages": {
       "post": {
-        "operationId": "add_message_api_v1_runs__run_id__messages_post",
+        "operationId": "runs_add_message",
         "parameters": [
           {
             "in": "path",
@@ -22052,7 +22393,7 @@
     "/api/v1/runs/{run_id}/revive": {
       "post": {
         "description": "Create a new run for the same agent, seeded with the prior session snapshot.\n\nRestoring the snapshot alone gives the agent nothing to act on; a revived run\nstill drives a turn with input. With no body input we reuse the original\nrun's input (resume a pending/failed turn); with body input we use it as the\nnext turn (continue a completed run).\n\nDelivery mirrors ``/invoke``: prefer the reverse SSE channel (the only way to\nreach outbound-only workers \u2014 staging/prod live in a separate namespace the CP\ncannot dial), and fall back to a direct A2A POST only when no channel is\nconnected (local/dev). The snapshot rides either path as wire-only metadata.",
-        "operationId": "revive_run_api_v1_runs__run_id__revive_post",
+        "operationId": "runs_revive_run",
         "parameters": [
           {
             "in": "path",
@@ -22111,7 +22452,7 @@
     },
     "/api/v1/runs/{run_id}/skills": {
       "get": {
-        "operationId": "get_run_skills_api_v1_runs__run_id__skills_get",
+        "operationId": "runs_get_run_skills",
         "parameters": [
           {
             "in": "path",
@@ -22134,7 +22475,7 @@
                     },
                     "type": "array"
                   },
-                  "title": "Response Get Run Skills Api V1 Runs  Run Id  Skills Get",
+                  "title": "Response Runs Get Run Skills",
                   "type": "object"
                 }
               }
@@ -22160,7 +22501,7 @@
     },
     "/api/v1/runs/{run_id}/start": {
       "post": {
-        "operationId": "start_api_v1_runs__run_id__start_post",
+        "operationId": "runs_start",
         "parameters": [
           {
             "in": "path",
@@ -22212,7 +22553,7 @@
     },
     "/api/v1/schedules": {
       "get": {
-        "operationId": "list_schedules_endpoint_api_v1_schedules_get",
+        "operationId": "schedules_list_schedules_endpoint",
         "parameters": [
           {
             "in": "query",
@@ -22239,7 +22580,7 @@
                   "items": {
                     "$ref": "#/components/schemas/ScheduleResponse"
                   },
-                  "title": "Response List Schedules Endpoint Api V1 Schedules Get",
+                  "title": "Response Schedules List Schedules Endpoint",
                   "type": "array"
                 }
               }
@@ -22263,7 +22604,7 @@
         ]
       },
       "post": {
-        "operationId": "create_schedule_endpoint_api_v1_schedules_post",
+        "operationId": "schedules_create_schedule_endpoint",
         "requestBody": {
           "content": {
             "application/json": {
@@ -22304,7 +22645,7 @@
     },
     "/api/v1/schedules/{schedule_id}": {
       "delete": {
-        "operationId": "delete_schedule_endpoint_api_v1_schedules__schedule_id__delete",
+        "operationId": "schedules_delete_schedule_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -22337,7 +22678,7 @@
         ]
       },
       "get": {
-        "operationId": "get_schedule_endpoint_api_v1_schedules__schedule_id__get",
+        "operationId": "schedules_get_schedule_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -22377,7 +22718,7 @@
         ]
       },
       "patch": {
-        "operationId": "update_schedule_endpoint_api_v1_schedules__schedule_id__patch",
+        "operationId": "schedules_update_schedule_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -22429,7 +22770,7 @@
     },
     "/api/v1/scores": {
       "get": {
-        "operationId": "list_scores_endpoint_api_v1_scores_get",
+        "operationId": "scores_list_scores_endpoint",
         "parameters": [
           {
             "in": "query",
@@ -22477,10 +22818,13 @@
             "description": "Validation Error"
           }
         },
-        "summary": "List Scores Endpoint"
+        "summary": "List Scores Endpoint",
+        "tags": [
+          "scores"
+        ]
       },
       "post": {
-        "operationId": "create_score_endpoint_api_v1_scores_post",
+        "operationId": "scores_create_score_endpoint",
         "requestBody": {
           "content": {
             "application/json": {
@@ -22513,12 +22857,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Create Score Endpoint"
+        "summary": "Create Score Endpoint",
+        "tags": [
+          "scores"
+        ]
       }
     },
     "/api/v1/scores/{score_id}": {
       "delete": {
-        "operationId": "delete_score_endpoint_api_v1_scores__score_id__delete",
+        "operationId": "scores_delete_score_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -22545,10 +22892,13 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Delete Score Endpoint"
+        "summary": "Delete Score Endpoint",
+        "tags": [
+          "scores"
+        ]
       },
       "patch": {
-        "operationId": "update_score_endpoint_api_v1_scores__score_id__patch",
+        "operationId": "scores_update_score_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -22592,13 +22942,16 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Update Score Endpoint"
+        "summary": "Update Score Endpoint",
+        "tags": [
+          "scores"
+        ]
       }
     },
     "/api/v1/session/accounts": {
       "get": {
         "description": "All accounts (optionally name/slug-filtered) \u2014 the system-admin cross-account switch targets.\nSystem-admin only; ordinary members switch among ``member_accounts`` from /auth/me instead.",
-        "operationId": "list_all_accounts_api_v1_session_accounts_get",
+        "operationId": "session_list_all_accounts",
         "parameters": [
           {
             "in": "query",
@@ -22625,7 +22978,7 @@
                   "items": {
                     "$ref": "#/components/schemas/AccountOption"
                   },
-                  "title": "Response List All Accounts Api V1 Session Accounts Get",
+                  "title": "Response Session List All Accounts",
                   "type": "array"
                 }
               }
@@ -22652,7 +23005,7 @@
     "/api/v1/session/impersonate": {
       "post": {
         "description": "Mint a session that acts AS the target human in their account. System-admin only. The target\nbecomes the effective identity (acting with their own permissions); the admin is preserved in the\n``impersonator_*`` claims and the action is audited.",
-        "operationId": "impersonate_api_v1_session_impersonate_post",
+        "operationId": "session_impersonate",
         "requestBody": {
           "content": {
             "application/json": {
@@ -22687,7 +23040,7 @@
     "/api/v1/session/stop-impersonation": {
       "post": {
         "description": "Revert an impersonation / account-view session back to the originating admin's own session.\n\nAuthorized by the signed cookie itself: only a session that carries ``impersonator_*`` claims can\ncall this, and it restores exactly that admin \u2014 no system-admin re-check (the effective user is\nthe impersonated target, which is deliberately NOT treated as admin).",
-        "operationId": "stop_impersonation_api_v1_session_stop_impersonation_post",
+        "operationId": "session_stop_impersonation",
         "responses": {
           "204": {
             "description": "Successful Response"
@@ -22702,7 +23055,7 @@
     "/api/v1/session/switch-account": {
       "post": {
         "description": "Switch the active account. If the caller is a member of the target, switch to their own\nprincipal there (ordinary org switch). Otherwise it requires a system admin, who enters via the\naccount's hidden ``system`` principal (cross-account view; writes flag-gated by the middleware).",
-        "operationId": "switch_account_api_v1_session_switch_account_post",
+        "operationId": "session_switch_account",
         "requestBody": {
           "content": {
             "application/json": {
@@ -22736,7 +23089,7 @@
     },
     "/api/v1/skills": {
       "get": {
-        "operationId": "list_skills_route_api_v1_skills_get",
+        "operationId": "skills_list_skills_route",
         "parameters": [
           {
             "in": "query",
@@ -22763,7 +23116,7 @@
                   "items": {
                     "$ref": "#/components/schemas/SkillSummary"
                   },
-                  "title": "Response List Skills Route Api V1 Skills Get",
+                  "title": "Response Skills List Skills Route",
                   "type": "array"
                 }
               }
@@ -22789,7 +23142,7 @@
     },
     "/api/v1/skills/{skill_id}": {
       "get": {
-        "operationId": "get_skill_route_api_v1_skills__skill_id__get",
+        "operationId": "skills_get_skill_route",
         "parameters": [
           {
             "in": "path",
@@ -22831,14 +23184,14 @@
     },
     "/api/v1/slack/commands": {
       "post": {
-        "operationId": "slack_commands_api_v1_slack_commands_post",
+        "operationId": "slack_slack_commands",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Slack Commands Api V1 Slack Commands Post",
+                  "title": "Response Slack Slack Commands",
                   "type": "object"
                 }
               }
@@ -22854,14 +23207,14 @@
     },
     "/api/v1/slack/events": {
       "post": {
-        "operationId": "slack_events_api_v1_slack_events_post",
+        "operationId": "slack_slack_events",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Slack Events Api V1 Slack Events Post",
+                  "title": "Response Slack Slack Events",
                   "type": "object"
                 }
               }
@@ -22877,14 +23230,14 @@
     },
     "/api/v1/slack/interactive": {
       "post": {
-        "operationId": "slack_interactive_api_v1_slack_interactive_post",
+        "operationId": "slack_slack_interactive",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Slack Interactive Api V1 Slack Interactive Post",
+                  "title": "Response Slack Slack Interactive",
                   "type": "object"
                 }
               }
@@ -22900,7 +23253,7 @@
     },
     "/api/v1/triggers": {
       "get": {
-        "operationId": "list_triggers_endpoint_api_v1_triggers_get",
+        "operationId": "triggers_list_triggers_endpoint",
         "parameters": [
           {
             "in": "query",
@@ -22943,7 +23296,7 @@
                   "items": {
                     "$ref": "#/components/schemas/WebhookTriggerResponse"
                   },
-                  "title": "Response List Triggers Endpoint Api V1 Triggers Get",
+                  "title": "Response Triggers List Triggers Endpoint",
                   "type": "array"
                 }
               }
@@ -22967,7 +23320,7 @@
         ]
       },
       "post": {
-        "operationId": "create_trigger_endpoint_api_v1_triggers_post",
+        "operationId": "triggers_create_trigger_endpoint",
         "requestBody": {
           "content": {
             "application/json": {
@@ -23008,7 +23361,7 @@
     },
     "/api/v1/triggers/{trigger_id}": {
       "delete": {
-        "operationId": "delete_trigger_endpoint_api_v1_triggers__trigger_id__delete",
+        "operationId": "triggers_delete_trigger_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -23041,7 +23394,7 @@
         ]
       },
       "get": {
-        "operationId": "get_trigger_endpoint_api_v1_triggers__trigger_id__get",
+        "operationId": "triggers_get_trigger_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -23081,7 +23434,7 @@
         ]
       },
       "patch": {
-        "operationId": "update_trigger_endpoint_api_v1_triggers__trigger_id__patch",
+        "operationId": "triggers_update_trigger_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -23133,7 +23486,7 @@
     },
     "/api/v1/triggers/{trigger_id}/rotate-token": {
       "post": {
-        "operationId": "rotate_token_endpoint_api_v1_triggers__trigger_id__rotate_token_post",
+        "operationId": "triggers_rotate_token_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -23175,7 +23528,7 @@
     },
     "/api/v1/webhooks/workflows/{workflow_id}": {
       "post": {
-        "operationId": "trigger_workflow_api_v1_webhooks_workflows__workflow_id__post",
+        "operationId": "webhooks_trigger_workflow",
         "parameters": [
           {
             "in": "path",
@@ -23217,7 +23570,7 @@
     },
     "/api/v1/webhooks/{agent_id}": {
       "post": {
-        "operationId": "trigger_agent_api_v1_webhooks__agent_id__post",
+        "operationId": "webhooks_trigger_agent",
         "parameters": [
           {
             "in": "path",
@@ -23259,7 +23612,7 @@
     },
     "/api/v1/worker-catalog": {
       "get": {
-        "operationId": "list_worker_catalog_api_v1_worker_catalog_get",
+        "operationId": "worker-catalog_list_worker_catalog",
         "responses": {
           "200": {
             "content": {
@@ -23268,7 +23621,7 @@
                   "items": {
                     "$ref": "#/components/schemas/WorkerCatalogEntryResponse"
                   },
-                  "title": "Response List Worker Catalog Api V1 Worker Catalog Get",
+                  "title": "Response Worker-Catalog List Worker Catalog",
                   "type": "array"
                 }
               }
@@ -23284,7 +23637,7 @@
     },
     "/api/v1/worker-catalog/{catalog_id}/deploy": {
       "post": {
-        "operationId": "deploy_worker_catalog_api_v1_worker_catalog__catalog_id__deploy_post",
+        "operationId": "worker-catalog_deploy_worker_catalog",
         "parameters": [
           {
             "in": "path",
@@ -23337,7 +23690,7 @@
     "/api/v1/workers/grade-context/{grade_run_id}": {
       "get": {
         "description": "Return the run a grader was dispatched to evaluate, plus its binding's guidelines.\n\nWorker-authenticated and authorized by grade-run ownership (when worker auth is on, the\nauthenticated caller must own ``grade_run_id``), so a grader pulls only the run it was asked\nto grade \u2014 it never reads arbitrary runs and never writes scores. Lets the control plane push\nan empty grade-run payload instead of inlining (and persisting a duplicate of) the target\nrun's I/O. With worker auth off (open/local clusters) the caller is unauthenticated and the\ngrader is taken from the grade run itself.",
-        "operationId": "fetch_grade_context_api_v1_workers_grade_context__grade_run_id__get",
+        "operationId": "workers_fetch_grade_context",
         "parameters": [
           {
             "in": "path",
@@ -23380,7 +23733,7 @@
     "/api/v1/workers/integrations/github/token": {
       "get": {
         "description": "Return a short-lived GitHub App installation token for authenticated workers.",
-        "operationId": "fetch_github_integration_token_api_v1_workers_integrations_github_token_get",
+        "operationId": "workers_fetch_github_integration_token",
         "responses": {
           "200": {
             "content": {
@@ -23389,7 +23742,7 @@
                   "additionalProperties": {
                     "type": "string"
                   },
-                  "title": "Response Fetch Github Integration Token Api V1 Workers Integrations Github Token Get",
+                  "title": "Response Workers Fetch Github Integration Token",
                   "type": "object"
                 }
               }
@@ -23406,7 +23759,7 @@
     "/api/v1/workers/secrets": {
       "get": {
         "description": "Pull the on-demand credentials bound to the calling worker's agent.\n\nThe agent identity is the one the worker authenticated as (``X-Agent-Id``),\nnever a client-supplied parameter, so a worker can only fetch its own secrets.",
-        "operationId": "fetch_on_demand_secrets_api_v1_workers_secrets_get",
+        "operationId": "workers_fetch_on_demand_secrets",
         "responses": {
           "200": {
             "content": {
@@ -23427,7 +23780,7 @@
     },
     "/api/v1/workers/{worker_id}/channel": {
       "get": {
-        "operationId": "worker_channel_api_v1_workers__worker_id__channel_get",
+        "operationId": "workers_worker_channel",
         "parameters": [
           {
             "in": "path",
@@ -23467,7 +23820,7 @@
     },
     "/api/v1/workers/{worker_id}/heartbeat": {
       "put": {
-        "operationId": "heartbeat_api_v1_workers__worker_id__heartbeat_put",
+        "operationId": "workers_heartbeat",
         "parameters": [
           {
             "in": "path",
@@ -23535,7 +23888,7 @@
     },
     "/api/v1/workers/{worker_id}/runs/claim": {
       "post": {
-        "operationId": "claim_run_api_v1_workers__worker_id__runs_claim_post",
+        "operationId": "workers_claim_run",
         "parameters": [
           {
             "in": "path",
@@ -23587,7 +23940,7 @@
     },
     "/api/v1/workflows": {
       "get": {
-        "operationId": "list_workflows_endpoint_api_v1_workflows_get",
+        "operationId": "workflows_list_workflows_endpoint",
         "responses": {
           "200": {
             "content": {
@@ -23596,7 +23949,7 @@
                   "items": {
                     "$ref": "#/components/schemas/WorkflowResponse"
                   },
-                  "title": "Response List Workflows Endpoint Api V1 Workflows Get",
+                  "title": "Response Workflows List Workflows Endpoint",
                   "type": "array"
                 }
               }
@@ -23610,7 +23963,7 @@
         ]
       },
       "post": {
-        "operationId": "create_workflow_endpoint_api_v1_workflows_post",
+        "operationId": "workflows_create_workflow_endpoint",
         "requestBody": {
           "content": {
             "application/json": {
@@ -23651,7 +24004,7 @@
     },
     "/api/v1/workflows/{workflow_id}": {
       "delete": {
-        "operationId": "delete_workflow_endpoint_api_v1_workflows__workflow_id__delete",
+        "operationId": "workflows_delete_workflow_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -23684,7 +24037,7 @@
         ]
       },
       "get": {
-        "operationId": "get_workflow_endpoint_api_v1_workflows__workflow_id__get",
+        "operationId": "workflows_get_workflow_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -23724,7 +24077,7 @@
         ]
       },
       "patch": {
-        "operationId": "update_workflow_endpoint_api_v1_workflows__workflow_id__patch",
+        "operationId": "workflows_update_workflow_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -23776,7 +24129,7 @@
     },
     "/api/v1/workflows/{workflow_id}/run": {
       "post": {
-        "operationId": "run_workflow_endpoint_api_v1_workflows__workflow_id__run_post",
+        "operationId": "workflows_run_workflow_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -23828,7 +24181,7 @@
     },
     "/api/v1/workflows/{workflow_id}/runs": {
       "get": {
-        "operationId": "list_workflow_runs_endpoint_api_v1_workflows__workflow_id__runs_get",
+        "operationId": "workflows_list_workflow_runs_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -23858,7 +24211,7 @@
                   "items": {
                     "$ref": "#/components/schemas/WorkflowRunResponse"
                   },
-                  "title": "Response List Workflow Runs Endpoint Api V1 Workflows  Workflow Id  Runs Get",
+                  "title": "Response Workflows List Workflow Runs Endpoint",
                   "type": "array"
                 }
               }
@@ -23884,7 +24237,7 @@
     },
     "/api/v1/workflows/{workflow_id}/runs/{instance_id}/steps": {
       "get": {
-        "operationId": "list_workflow_run_steps_endpoint_api_v1_workflows__workflow_id__runs__instance_id__steps_get",
+        "operationId": "workflows_list_workflow_run_steps_endpoint",
         "parameters": [
           {
             "in": "path",
@@ -23913,7 +24266,7 @@
                   "items": {
                     "$ref": "#/components/schemas/WorkflowRunStepResponse"
                   },
-                  "title": "Response List Workflow Run Steps Endpoint Api V1 Workflows  Workflow Id  Runs  Instance Id  Steps Get",
+                  "title": "Response Workflows List Workflow Run Steps Endpoint",
                   "type": "array"
                 }
               }
@@ -23940,7 +24293,7 @@
     "/auth/dev/login": {
       "get": {
         "description": "Serve the dev/preview login helper page (see ``_DEV_LOGIN_HTML``).\n\nGated by the same toggle as the exchange itself. Open it from the preview at\n``http://localhost:5173/auth/dev/login`` (vite proxies ``/auth`` to the control plane).",
-        "operationId": "dev_login_auth_dev_login_get",
+        "operationId": "auth_dev_login",
         "responses": {
           "200": {
             "content": {
@@ -23960,7 +24313,7 @@
     "/auth/logout": {
       "get": {
         "description": "Clear the local session and, for OIDC logins, end the IdP session too.\n\nRP-initiated logout: redirect to the provider's end_session_endpoint with\npost_logout_redirect_uri (registered on the app) so the IdP ends its session and bounces\nback. Without ending the IdP session, the still-active SSO session would silently log the\nuser back in.\n\nNOTE: we no longer carry the id_token in the session cookie (see the OIDC callback hotfix\nre: the 4096-byte cookie limit), so no id_token_hint is sent. Auth0 still ends the session\nand redirects via client_id + a registered post_logout_redirect_uri. Restore the hint once\na server-side session store lands and the id_token is available again.",
-        "operationId": "logout_auth_logout_get",
+        "operationId": "auth_logout_get",
         "responses": {
           "200": {
             "content": {
@@ -23978,7 +24331,7 @@
       },
       "post": {
         "description": "Clear the local session and, for OIDC logins, end the IdP session too.\n\nRP-initiated logout: redirect to the provider's end_session_endpoint with\npost_logout_redirect_uri (registered on the app) so the IdP ends its session and bounces\nback. Without ending the IdP session, the still-active SSO session would silently log the\nuser back in.\n\nNOTE: we no longer carry the id_token in the session cookie (see the OIDC callback hotfix\nre: the 4096-byte cookie limit), so no id_token_hint is sent. Auth0 still ends the session\nand redirects via client_id + a registered post_logout_redirect_uri. Restore the hint once\na server-side session store lands and the id_token is available again.",
-        "operationId": "logout_auth_logout_post",
+        "operationId": "auth_logout",
         "responses": {
           "200": {
             "content": {
@@ -23997,7 +24350,7 @@
     },
     "/auth/me": {
       "get": {
-        "operationId": "me_auth_me_get",
+        "operationId": "auth_me",
         "responses": {
           "200": {
             "content": {
@@ -24018,7 +24371,7 @@
     },
     "/auth/oidc/callback": {
       "get": {
-        "operationId": "oidc_callback_auth_oidc_callback_get",
+        "operationId": "auth_oidc_callback",
         "parameters": [
           {
             "in": "query",
@@ -24114,7 +24467,7 @@
     "/auth/oidc/login": {
       "get": {
         "description": "Begin the OIDC Authorization Code + PKCE flow.\n\nWith ``silent=1`` the authorize request carries ``prompt=none``: the IdP reuses an existing\nSSO session and redirects straight back with a code (no login UI), or \u2014 when no live SSO\nsession exists \u2014 returns ``error=login_required`` to the callback, which then falls back to an\ninteractive login. This is how a control-plane session (a hard-capped signed cookie, no refresh\ntoken) is transparently renewed against the longer-lived IdP session.",
-        "operationId": "oidc_login_auth_oidc_login_get",
+        "operationId": "auth_oidc_login",
         "parameters": [
           {
             "in": "query",
@@ -24166,7 +24519,7 @@
     "/auth/session/exchange": {
       "post": {
         "description": "Exchange a human-bound API key for the same signed session cookie the OIDC callback issues.\n\nThis is the non-interactive login path: a key minted with ``apikey mint --user-email`` acts as a\nhuman's per-account principal, so we mint that user's session directly \u2014 no Auth0 browser\nredirect. It's how the localhost-only Claude Code preview (and automated UI tests) log in as a\nreal user. No privilege escalation: the bearer already grants full API access as that principal;\nthis just additionally enables the browser/UI surface for the *same* identity.\n\nRequires ``Authorization: Bearer <api-key>``. The key must be bound to a ``human`` principal \u2014\na plain ``service_account`` key has no user to represent and is rejected (400).",
-        "operationId": "session_exchange_auth_session_exchange_post",
+        "operationId": "auth_session_exchange",
         "responses": {
           "200": {
             "content": {
@@ -24186,7 +24539,7 @@
     "/auth/start": {
       "get": {
         "description": "Login entry point.\n\nThe SPA's RequireAuth redirects here when the session is missing/expired, so the client\ndoesn't need to construct the provider login URL itself: this 302s to a *silent* OIDC login\n(``/auth/oidc/login?silent=1``) via ``login_path``, preserving ``next``. A live IdP SSO session\nis then renewed with no UI; if there is none, the callback falls back to an interactive login.\nWhen auth is disabled (local dev) there is nothing to log into \u2192 bounce home.",
-        "operationId": "start_auth_start_get",
+        "operationId": "auth_start",
         "parameters": [
           {
             "in": "query",
@@ -24227,7 +24580,7 @@
     },
     "/channels/connect": {
       "get": {
-        "operationId": "channel_connect_channels_connect_get",
+        "operationId": "channels-connect_channel_connect",
         "parameters": [
           {
             "in": "query",
