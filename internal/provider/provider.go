@@ -5,23 +5,26 @@ package provider
 
 import (
 	"context"
-	"net/http"
+	"os"
 
-	"github.com/hashicorp/terraform-plugin-framework/action"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
-	"github.com/hashicorp/terraform-plugin-framework/ephemeral"
-	"github.com/hashicorp/terraform-plugin-framework/function"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+
+	"github.com/komodorio/terraform-provider-agentops/internal/client"
 )
 
-// Ensure KomodorAgentOpsProvider satisfies various provider interfaces.
+// Ensure KomodorAgentOpsProvider satisfies the provider interface.
 var _ provider.Provider = &KomodorAgentOpsProvider{}
-var _ provider.ProviderWithFunctions = &KomodorAgentOpsProvider{}
-var _ provider.ProviderWithEphemeralResources = &KomodorAgentOpsProvider{}
-var _ provider.ProviderWithActions = &KomodorAgentOpsProvider{}
+
+// Environment variables used as fallbacks for provider configuration.
+const (
+	envEndpoint = "AGENTOPS_ENDPOINT"
+	envAPIKey   = "AGENTOPS_API_KEY"
+)
 
 // KomodorAgentOpsProvider defines the provider implementation.
 type KomodorAgentOpsProvider struct {
@@ -31,9 +34,10 @@ type KomodorAgentOpsProvider struct {
 	version string
 }
 
-// KomodorAgentOpsProviderModel describes the provider data model.
+// KomodorAgentOpsProviderModel describes the provider configuration.
 type KomodorAgentOpsProviderModel struct {
 	Endpoint types.String `tfsdk:"endpoint"`
+	APIKey   types.String `tfsdk:"api_key"`
 }
 
 func (p *KomodorAgentOpsProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -43,10 +47,19 @@ func (p *KomodorAgentOpsProvider) Metadata(ctx context.Context, req provider.Met
 
 func (p *KomodorAgentOpsProvider) Schema(ctx context.Context, req provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		MarkdownDescription: "Manage Komodor AgentOps config-plane resources as code.",
 		Attributes: map[string]schema.Attribute{
 			"endpoint": schema.StringAttribute{
-				MarkdownDescription: "Example provider attribute",
-				Optional:            true,
+				MarkdownDescription: "AgentOps control-plane base URL. Defaults to `" + client.DefaultEndpoint +
+					"`. May also be set via the `" + envEndpoint + "` environment variable. Use " +
+					"`https://staging.agentops.komodor.com` for staging or your own URL for self-hosted.",
+				Optional: true,
+			},
+			"api_key": schema.StringAttribute{
+				MarkdownDescription: "AgentOps API key used as a Bearer token. May also be set via the `" +
+					envAPIKey + "` environment variable.",
+				Optional:  true,
+				Sensitive: true,
 			},
 		},
 	}
@@ -54,49 +67,53 @@ func (p *KomodorAgentOpsProvider) Schema(ctx context.Context, req provider.Schem
 
 func (p *KomodorAgentOpsProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
 	var data KomodorAgentOpsProviderModel
-
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
-
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	// Configuration values are now available.
-	// if data.Endpoint.IsNull() { /* ... */ }
+	// Precedence: explicit config value, then environment variable, then default.
+	endpoint := os.Getenv(envEndpoint)
+	if !data.Endpoint.IsNull() {
+		endpoint = data.Endpoint.ValueString()
+	}
+	if endpoint == "" {
+		endpoint = client.DefaultEndpoint
+	}
 
-	// Example client configuration for data sources and resources
-	client := http.DefaultClient
-	resp.DataSourceData = client
-	resp.ResourceData = client
+	apiKey := os.Getenv(envAPIKey)
+	if !data.APIKey.IsNull() {
+		apiKey = data.APIKey.ValueString()
+	}
+	if apiKey == "" {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("api_key"),
+			"Missing AgentOps API key",
+			"An API key is required. Set the provider `api_key` attribute or the "+envAPIKey+" environment variable.",
+		)
+		return
+	}
+
+	c, err := client.New(endpoint, apiKey, p.version)
+	if err != nil {
+		resp.Diagnostics.AddError("Unable to create AgentOps client", err.Error())
+		return
+	}
+
+	resp.DataSourceData = c
+	resp.ResourceData = c
 }
 
 func (p *KomodorAgentOpsProvider) Resources(ctx context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
-		NewExampleResource,
-	}
-}
-
-func (p *KomodorAgentOpsProvider) EphemeralResources(ctx context.Context) []func() ephemeral.EphemeralResource {
-	return []func() ephemeral.EphemeralResource{
-		NewExampleEphemeralResource,
+		NewTriggerResource,
+		NewAPIKeyResource,
 	}
 }
 
 func (p *KomodorAgentOpsProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
-		NewExampleDataSource,
-	}
-}
-
-func (p *KomodorAgentOpsProvider) Functions(ctx context.Context) []func() function.Function {
-	return []func() function.Function{
-		NewExampleFunction,
-	}
-}
-
-func (p *KomodorAgentOpsProvider) Actions(ctx context.Context) []func() action.Action {
-	return []func() action.Action{
-		NewExampleAction,
+		NewIntegrationCatalogDataSource,
 	}
 }
 

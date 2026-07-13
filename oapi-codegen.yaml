@@ -13,3 +13,8 @@ output-options:
   # Keep every schema in the spec even if it is not referenced by an operation
   # we call today, so the generated client stays a faithful mirror of the API.
   skip-prune: true
+  # Drop the out-of-scope `auth` tag (login/session/me — infra, not config-plane).
+  # Its `auth_me` operation would otherwise generate an `AuthMeResponse` wrapper
+  # that collides with the component schema of the same name.
+  exclude-tags:
+    - auth
