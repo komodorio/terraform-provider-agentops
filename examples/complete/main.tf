@@ -1,9 +1,7 @@
-# End-to-end example: discover available integrations, mint an API key for a
-# service account, and register a webhook trigger for an agent.
-#
-# As more resources land (service accounts, roles, workflows), this example will
-# grow into the full chain: create service account -> grant role -> mint api key
-# -> connect integration -> wire a workflow.
+# End-to-end example wiring the AgentOps config plane together:
+# policy -> role -> service account -> grant -> API key -> credential (+ binding)
+# -> knowledge base (+ agent grant) -> integration -> workflow -> trigger ->
+# schedule, plus a couple of read-only lookups.
 
 terraform {
   required_providers {
@@ -18,21 +16,83 @@ provider "agentops" {
   api_key  = var.api_key
 }
 
-# Look up the integrations available to this account.
+# ── Read-only lookups ────────────────────────────────────────────────────────
 data "agentops_integration_catalog" "all" {}
+data "agentops_capabilities" "all" {}
 
-# Mint an API key for a CI pipeline, bound to a service account.
+# ── Authorization: policy -> role -> service account -> grant ────────────────
+resource "agentops_policy" "invoke" {
+  name        = "invoke-agents"
+  description = "Allows invoking agents"
+
+  grants = jsonencode([
+    { capability = "agent.invoke", resource_type = "agent" },
+  ])
+}
+
+resource "agentops_role" "operator" {
+  name        = "operator"
+  description = "Can operate agents"
+  policy_ids  = [agentops_policy.invoke.id]
+}
+
+resource "agentops_service_account" "ci" {
+  display_name = "ci-bot"
+}
+
+resource "agentops_grant" "ci_operator" {
+  grant_kind    = "role"
+  role_id       = agentops_role.operator.id
+  resource_type = "agent"
+  resource_id   = var.agent_id
+
+  subject = jsonencode({
+    id   = agentops_service_account.ci.id
+    kind = "principal"
+  })
+}
+
+# ── Credentials for the service account / agents ─────────────────────────────
 resource "agentops_api_key" "ci" {
   name               = "ci-pipeline"
-  service_account_id = var.service_account_id
+  service_account_id = agentops_service_account.ci.id
   scopes             = ["triggers:write"]
 }
 
-# Register a webhook trigger that invokes an agent.
+resource "agentops_credential" "openai" {
+  name  = "openai-api-key"
+  value = var.openai_api_key
+}
+
+resource "agentops_credential_binding" "openai_to_agent" {
+  credential_id = agentops_credential.openai.id
+  agent_id      = var.agent_id
+}
+
+# ── Knowledge base + agent access ────────────────────────────────────────────
+resource "agentops_knowledge_base" "runbooks" {
+  name        = "runbooks"
+  description = "Operational runbooks"
+}
+
+resource "agentops_knowledge_base_agent" "runbooks_access" {
+  kb_id    = agentops_knowledge_base.runbooks.id
+  agent_id = var.agent_id
+}
+
+# ── Automation: workflow + trigger + schedule ────────────────────────────────
+resource "agentops_workflow" "triage" {
+  name       = "incident-triage"
+  is_enabled = true
+}
+
 resource "agentops_trigger" "deploy" {
   name        = "deploy-webhook"
-  description = "Fires the deploy agent on inbound webhooks"
   target_id   = var.agent_id
   target_type = "agent"
-  is_enabled  = true
+}
+
+resource "agentops_schedule" "nightly" {
+  agent_id  = var.agent_id
+  cron_expr = "0 2 * * *"
 }

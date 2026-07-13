@@ -112,11 +112,14 @@ func (p *KomodorAgentOpsProvider) Resources(ctx context.Context) []func() resour
 		NewPolicyResource,
 		NewGrantResource,
 		NewServiceAccountResource,
+		NewMemberResource,
 		NewScheduleResource,
 		NewCredentialResource,
+		NewCredentialBindingResource,
 		NewWorkflowResource,
 		NewIntegrationConnectionResource,
 		NewKnowledgeBaseResource,
+		NewKnowledgeBaseAgentResource,
 		NewMCPGatewayServerResource,
 		NewMCPGatewayGroupResource,
 		NewMCPGatewayPolicyResource,
@@ -126,6 +129,10 @@ func (p *KomodorAgentOpsProvider) Resources(ctx context.Context) []func() resour
 func (p *KomodorAgentOpsProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
 		NewIntegrationCatalogDataSource,
+		NewCapabilitiesDataSource,
+		NewResourceTypesDataSource,
+		NewWorkerCatalogDataSource,
+		NewSkillsDataSource,
 	}
 }
 

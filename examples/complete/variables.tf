@@ -11,12 +11,13 @@ variable "endpoint" {
   default     = null
 }
 
-variable "service_account_id" {
-  description = "Service account the CI API key is bound to."
+variable "agent_id" {
+  description = "ID of the agent the resources target."
   type        = string
 }
 
-variable "agent_id" {
-  description = "ID of the agent the trigger invokes."
+variable "openai_api_key" {
+  description = "Secret value stored in the openai credential."
   type        = string
+  sensitive   = true
 }
