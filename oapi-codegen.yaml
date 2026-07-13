@@ -1,0 +1,15 @@
+# Copyright IBM Corp. 2021, 2025
+# SPDX-License-Identifier: MPL-2.0
+
+# oapi-codegen configuration for the AgentOps control-plane client.
+# Consumed by `make generate` (see GNUmakefile). The input spec is the
+# vendored api/openapi.json, refreshed from the monorepo via `make sync-spec`.
+package: gen
+output: internal/client/gen/gen.go
+generate:
+  models: true
+  client: true
+output-options:
+  # Keep every schema in the spec even if it is not referenced by an operation
+  # we call today, so the generated client stays a faithful mirror of the API.
+  skip-prune: true

@@ -33,3 +33,6 @@ website/vendor
 
 # Keep windows files with windows line endings
 *.winfile eol=crlf
+
+# Down-converted spec produced transiently by `make generate`.
+/api/openapi.gen.json
