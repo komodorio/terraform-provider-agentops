@@ -121,7 +121,10 @@ files in [`examples/`](./examples):
 make docs
 ```
 
-## Publishing
+## Releasing and publishing
 
 The provider is published as `komodorio/agentops`. Releases are built and signed
-by GoReleaser (see [`.goreleaser.yml`](./.goreleaser.yml)).
+by GoReleaser and triggered by pushing a `v*` tag. See [`RELEASING.md`](./RELEASING.md)
+for how to cut a release, the required signing secrets, publishing to the public
+Terraform Registry, and consuming the provider privately (filesystem mirror or
+dev overrides) in the meantime.
