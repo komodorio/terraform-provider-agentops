@@ -59,6 +59,9 @@ export AGENTOPS_ENDPOINT="https://staging.agentops.komodor.com" # optional
 | ----------- | --------------------------------- | ------------------------------------------------- |
 | Resource    | `agentops_trigger`                | Webhook trigger that invokes an agent or workflow |
 | Resource    | `agentops_api_key`                | API key (create/delete only; secret shown once)   |
+| Resource    | `agentops_role`                   | Authorization role bundling policies              |
+| Resource    | `agentops_policy`                 | Authorization policy (grants)                     |
+| Resource    | `agentops_grant`                  | Authorization grant to a subject                  |
 | Resource    | `agentops_service_account`        | Service account (create/delete only)              |
 | Resource    | `agentops_schedule`               | Cron schedule that runs an agent                  |
 | Resource    | `agentops_credential`             | Stored credential with a write-only value         |

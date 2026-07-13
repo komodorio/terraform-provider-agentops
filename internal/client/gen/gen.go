@@ -144,6 +144,21 @@ func (e ApiKeyStatus) Valid() bool {
 	}
 }
 
+// Defines values for AuthzGrantSubjectKind.
+const (
+	AuthzGrantSubjectKindPrincipal AuthzGrantSubjectKind = "principal"
+)
+
+// Valid indicates whether the value is a known member of the AuthzGrantSubjectKind enum.
+func (e AuthzGrantSubjectKind) Valid() bool {
+	switch e {
+	case AuthzGrantSubjectKindPrincipal:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ChatMessageRole.
 const (
 	ChatMessageRoleAssistant ChatMessageRole = "assistant"
@@ -182,11 +197,11 @@ func (e ChatMessageResponseRole) Valid() bool {
 
 // Defines values for CreateIntegrationConnectionResponseStatus.
 const (
-	CreateIntegrationConnectionResponseStatusActive  CreateIntegrationConnectionResponseStatus = "active"
-	CreateIntegrationConnectionResponseStatusError   CreateIntegrationConnectionResponseStatus = "error"
-	CreateIntegrationConnectionResponseStatusExpired CreateIntegrationConnectionResponseStatus = "expired"
-	CreateIntegrationConnectionResponseStatusPending CreateIntegrationConnectionResponseStatus = "pending"
-	CreateIntegrationConnectionResponseStatusRevoked CreateIntegrationConnectionResponseStatus = "revoked"
+	CreateIntegrationConnectionResponseStatusActive   CreateIntegrationConnectionResponseStatus = "active"
+	CreateIntegrationConnectionResponseStatusDisabled CreateIntegrationConnectionResponseStatus = "disabled"
+	CreateIntegrationConnectionResponseStatusError    CreateIntegrationConnectionResponseStatus = "error"
+	CreateIntegrationConnectionResponseStatusPending  CreateIntegrationConnectionResponseStatus = "pending"
+	CreateIntegrationConnectionResponseStatusRevoked  CreateIntegrationConnectionResponseStatus = "revoked"
 )
 
 // Valid indicates whether the value is a known member of the CreateIntegrationConnectionResponseStatus enum.
@@ -194,9 +209,9 @@ func (e CreateIntegrationConnectionResponseStatus) Valid() bool {
 	switch e {
 	case CreateIntegrationConnectionResponseStatusActive:
 		return true
-	case CreateIntegrationConnectionResponseStatusError:
+	case CreateIntegrationConnectionResponseStatusDisabled:
 		return true
-	case CreateIntegrationConnectionResponseStatusExpired:
+	case CreateIntegrationConnectionResponseStatusError:
 		return true
 	case CreateIntegrationConnectionResponseStatusPending:
 		return true
@@ -437,11 +452,11 @@ func (e IntegrationCatalogEntryAuthMode) Valid() bool {
 
 // Defines values for IntegrationConnectionStatus.
 const (
-	IntegrationConnectionStatusActive  IntegrationConnectionStatus = "active"
-	IntegrationConnectionStatusError   IntegrationConnectionStatus = "error"
-	IntegrationConnectionStatusExpired IntegrationConnectionStatus = "expired"
-	IntegrationConnectionStatusPending IntegrationConnectionStatus = "pending"
-	IntegrationConnectionStatusRevoked IntegrationConnectionStatus = "revoked"
+	IntegrationConnectionStatusActive   IntegrationConnectionStatus = "active"
+	IntegrationConnectionStatusDisabled IntegrationConnectionStatus = "disabled"
+	IntegrationConnectionStatusError    IntegrationConnectionStatus = "error"
+	IntegrationConnectionStatusPending  IntegrationConnectionStatus = "pending"
+	IntegrationConnectionStatusRevoked  IntegrationConnectionStatus = "revoked"
 )
 
 // Valid indicates whether the value is a known member of the IntegrationConnectionStatus enum.
@@ -449,9 +464,9 @@ func (e IntegrationConnectionStatus) Valid() bool {
 	switch e {
 	case IntegrationConnectionStatusActive:
 		return true
-	case IntegrationConnectionStatusError:
+	case IntegrationConnectionStatusDisabled:
 		return true
-	case IntegrationConnectionStatusExpired:
+	case IntegrationConnectionStatusError:
 		return true
 	case IntegrationConnectionStatusPending:
 		return true
@@ -464,11 +479,11 @@ func (e IntegrationConnectionStatus) Valid() bool {
 
 // Defines values for IntegrationConnectionDetailStatus.
 const (
-	IntegrationConnectionDetailStatusActive  IntegrationConnectionDetailStatus = "active"
-	IntegrationConnectionDetailStatusError   IntegrationConnectionDetailStatus = "error"
-	IntegrationConnectionDetailStatusExpired IntegrationConnectionDetailStatus = "expired"
-	IntegrationConnectionDetailStatusPending IntegrationConnectionDetailStatus = "pending"
-	IntegrationConnectionDetailStatusRevoked IntegrationConnectionDetailStatus = "revoked"
+	IntegrationConnectionDetailStatusActive   IntegrationConnectionDetailStatus = "active"
+	IntegrationConnectionDetailStatusDisabled IntegrationConnectionDetailStatus = "disabled"
+	IntegrationConnectionDetailStatusError    IntegrationConnectionDetailStatus = "error"
+	IntegrationConnectionDetailStatusPending  IntegrationConnectionDetailStatus = "pending"
+	IntegrationConnectionDetailStatusRevoked  IntegrationConnectionDetailStatus = "revoked"
 )
 
 // Valid indicates whether the value is a known member of the IntegrationConnectionDetailStatus enum.
@@ -476,9 +491,9 @@ func (e IntegrationConnectionDetailStatus) Valid() bool {
 	switch e {
 	case IntegrationConnectionDetailStatusActive:
 		return true
-	case IntegrationConnectionDetailStatusError:
+	case IntegrationConnectionDetailStatusDisabled:
 		return true
-	case IntegrationConnectionDetailStatusExpired:
+	case IntegrationConnectionDetailStatusError:
 		return true
 	case IntegrationConnectionDetailStatusPending:
 		return true
@@ -1295,13 +1310,13 @@ func (e StartRunDirectRequestChannel) Valid() bool {
 
 // Defines values for SubjectModelKind.
 const (
-	Principal SubjectModelKind = "principal"
+	SubjectModelKindPrincipal SubjectModelKind = "principal"
 )
 
 // Valid indicates whether the value is a known member of the SubjectModelKind enum.
 func (e SubjectModelKind) Valid() bool {
 	switch e {
-	case Principal:
+	case SubjectModelKindPrincipal:
 		return true
 	default:
 		return false
@@ -1310,11 +1325,11 @@ func (e SubjectModelKind) Valid() bool {
 
 // Defines values for TestIntegrationConnectionResponseStatus.
 const (
-	TestIntegrationConnectionResponseStatusActive  TestIntegrationConnectionResponseStatus = "active"
-	TestIntegrationConnectionResponseStatusError   TestIntegrationConnectionResponseStatus = "error"
-	TestIntegrationConnectionResponseStatusExpired TestIntegrationConnectionResponseStatus = "expired"
-	TestIntegrationConnectionResponseStatusPending TestIntegrationConnectionResponseStatus = "pending"
-	TestIntegrationConnectionResponseStatusRevoked TestIntegrationConnectionResponseStatus = "revoked"
+	TestIntegrationConnectionResponseStatusActive   TestIntegrationConnectionResponseStatus = "active"
+	TestIntegrationConnectionResponseStatusDisabled TestIntegrationConnectionResponseStatus = "disabled"
+	TestIntegrationConnectionResponseStatusError    TestIntegrationConnectionResponseStatus = "error"
+	TestIntegrationConnectionResponseStatusPending  TestIntegrationConnectionResponseStatus = "pending"
+	TestIntegrationConnectionResponseStatusRevoked  TestIntegrationConnectionResponseStatus = "revoked"
 )
 
 // Valid indicates whether the value is a known member of the TestIntegrationConnectionResponseStatus enum.
@@ -1322,9 +1337,9 @@ func (e TestIntegrationConnectionResponseStatus) Valid() bool {
 	switch e {
 	case TestIntegrationConnectionResponseStatusActive:
 		return true
-	case TestIntegrationConnectionResponseStatusError:
+	case TestIntegrationConnectionResponseStatusDisabled:
 		return true
-	case TestIntegrationConnectionResponseStatusExpired:
+	case TestIntegrationConnectionResponseStatusError:
 		return true
 	case TestIntegrationConnectionResponseStatusPending:
 		return true
@@ -2127,6 +2142,29 @@ type AuthUser struct {
 	Picture *string `json:"picture,omitempty"`
 }
 
+// AuthzAccessCheckResult defines model for AuthzAccessCheckResult.
+type AuthzAccessCheckResult struct {
+	Allowed        bool    `json:"allowed"`
+	MatchedGrantId *string `json:"matched_grant_id,omitempty"`
+	Reason         string  `json:"reason"`
+}
+
+// AuthzAgent defines model for AuthzAgent.
+type AuthzAgent struct {
+	AgentId     string    `json:"agent_id"`
+	Name        string    `json:"name"`
+	PrincipalId string    `json:"principal_id"`
+	RoleIds     *[]string `json:"role_ids,omitempty"`
+}
+
+// AuthzCapabilityInfo defines model for AuthzCapabilityInfo.
+type AuthzCapabilityInfo struct {
+	Allows      string `json:"allows"`
+	Domain      string `json:"domain"`
+	Key         string `json:"key"`
+	Sensitivity string `json:"sensitivity"`
+}
+
 // AuthzContext The caller's authorization view — a "display extra" (like “is_system_admin“) hydrated only on
 // the “/auth/me“ path, for nav-gating admin affordances. The server still enforces every action
 // per-resource; this is UX only.
@@ -2140,6 +2178,120 @@ type AuthUser struct {
 type AuthzContext struct {
 	Capabilities *[]string `json:"capabilities,omitempty"`
 	Mode         string    `json:"mode"`
+}
+
+// AuthzEffectiveCapability defines model for AuthzEffectiveCapability.
+type AuthzEffectiveCapability struct {
+	Capability   string `json:"capability"`
+	GrantId      string `json:"grant_id"`
+	ResourceId   string `json:"resource_id"`
+	ResourceType string `json:"resource_type"`
+	Source       string `json:"source"`
+	Via          string `json:"via"`
+}
+
+// AuthzGrant defines model for AuthzGrant.
+type AuthzGrant struct {
+	Capability   *string                 `json:"capability,omitempty"`
+	CreatedAt    string                  `json:"created_at"`
+	Description  *string                 `json:"description,omitempty"`
+	ExpiresAt    *string                 `json:"expires_at,omitempty"`
+	GrantKind    string                  `json:"grant_kind"`
+	Id           string                  `json:"id"`
+	PolicyId     *string                 `json:"policy_id,omitempty"`
+	ResourceId   string                  `json:"resource_id"`
+	ResourceType string                  `json:"resource_type"`
+	RoleId       *string                 `json:"role_id,omitempty"`
+	Selector     *map[string]interface{} `json:"selector,omitempty"`
+	Subject      AuthzGrantSubject       `json:"subject"`
+}
+
+// AuthzGrantSubject defines model for AuthzGrantSubject.
+type AuthzGrantSubject struct {
+	Id   string                `json:"id"`
+	Kind AuthzGrantSubjectKind `json:"kind"`
+}
+
+// AuthzGrantSubjectKind defines model for AuthzGrantSubject.Kind.
+type AuthzGrantSubjectKind string
+
+// AuthzMember A member row for the list / attribute-edit views — adds the user-managed ABAC attributes.
+type AuthzMember struct {
+	Attributes  *map[string]string `json:"attributes,omitempty"`
+	Email       string             `json:"email"`
+	FullName    *string            `json:"full_name,omitempty"`
+	PrincipalId string             `json:"principal_id"`
+	RoleIds     *[]string          `json:"role_ids,omitempty"`
+}
+
+// AuthzMemberRoles A member's role-assignment result (what “PUT …/members/{id}/roles“ returns).
+type AuthzMemberRoles struct {
+	Email       string    `json:"email"`
+	FullName    *string   `json:"full_name,omitempty"`
+	PrincipalId string    `json:"principal_id"`
+	RoleIds     *[]string `json:"role_ids,omitempty"`
+}
+
+// AuthzPolicy defines model for AuthzPolicy.
+type AuthzPolicy struct {
+	Builtin     bool                `json:"builtin"`
+	CreatedAt   string              `json:"created_at"`
+	Description *string             `json:"description,omitempty"`
+	Grants      *[]AuthzPolicyGrant `json:"grants,omitempty"`
+	Id          string              `json:"id"`
+	Name        string              `json:"name"`
+}
+
+// AuthzPolicyGrant defines model for AuthzPolicyGrant.
+type AuthzPolicyGrant struct {
+	Capability   string                  `json:"capability"`
+	Effect       string                  `json:"effect"`
+	ExpiresAt    *string                 `json:"expires_at,omitempty"`
+	Id           string                  `json:"id"`
+	ResourceId   string                  `json:"resource_id"`
+	ResourceType string                  `json:"resource_type"`
+	Selector     *map[string]interface{} `json:"selector,omitempty"`
+}
+
+// AuthzPrincipal defines model for AuthzPrincipal.
+type AuthzPrincipal struct {
+	AgentId  *string `json:"agent_id,omitempty"`
+	Id       string  `json:"id"`
+	Kind     string  `json:"kind"`
+	Name     string  `json:"name"`
+	Subtitle *string `json:"subtitle,omitempty"`
+}
+
+// AuthzResourceType defines model for AuthzResourceType.
+type AuthzResourceType struct {
+	Key   string `json:"key"`
+	Notes string `json:"notes"`
+	Scope string `json:"scope"`
+}
+
+// AuthzRole defines model for AuthzRole.
+type AuthzRole struct {
+	Builtin     bool      `json:"builtin"`
+	Description *string   `json:"description,omitempty"`
+	Holders     int       `json:"holders"`
+	Id          string    `json:"id"`
+	Name        string    `json:"name"`
+	PolicyIds   *[]string `json:"policy_ids,omitempty"`
+}
+
+// AuthzServiceAccount A service-account row for the list / attribute-edit views — adds ABAC attributes.
+type AuthzServiceAccount struct {
+	Attributes  *map[string]string `json:"attributes,omitempty"`
+	DisplayName *string            `json:"display_name,omitempty"`
+	PrincipalId string             `json:"principal_id"`
+	RoleIds     *[]string          `json:"role_ids,omitempty"`
+}
+
+// AuthzServiceAccountRoles A service account's role-assignment result (what “PUT …/service-accounts/{id}/roles“ returns).
+type AuthzServiceAccountRoles struct {
+	DisplayName *string   `json:"display_name,omitempty"`
+	PrincipalId string    `json:"principal_id"`
+	RoleIds     *[]string `json:"role_ids,omitempty"`
 }
 
 // AutoScoreSeries Ordered per-run auto-grade (LLM) quality values for one agent over a window,
@@ -2192,6 +2344,42 @@ type CatalogTool struct {
 	ServerId   string                  `json:"server_id"`
 	Tags       *[]string               `json:"tags,omitempty"`
 	Title      *string                 `json:"title,omitempty"`
+}
+
+// ChannelResponse defines model for ChannelResponse.
+type ChannelResponse struct {
+	AccountId        string                  `json:"account_id"`
+	CapabilitiesJson *map[string]interface{} `json:"capabilities_json,omitempty"`
+	ConfigJson       *map[string]interface{} `json:"config_json,omitempty"`
+	Connector        string                  `json:"connector"`
+	CreatedAt        string                  `json:"created_at"`
+	CreatedBy        *string                 `json:"created_by,omitempty"`
+	DisplayName      string                  `json:"display_name"`
+	ExternalId       *string                 `json:"external_id,omitempty"`
+	Id               string                  `json:"id"`
+	IntegrationId    *string                 `json:"integration_id,omitempty"`
+	Labels           *map[string]string      `json:"labels,omitempty"`
+	LastEventAt      *string                 `json:"last_event_at,omitempty"`
+	Provider         string                  `json:"provider"`
+	Status           string                  `json:"status"`
+	UpdatedAt        string                  `json:"updated_at"`
+}
+
+// ChannelRouteResponse defines model for ChannelRouteResponse.
+type ChannelRouteResponse struct {
+	AccountId  string                  `json:"account_id"`
+	ChannelId  string                  `json:"channel_id"`
+	CreatedAt  string                  `json:"created_at"`
+	Id         string                  `json:"id"`
+	InputJson  *map[string]interface{} `json:"input_json,omitempty"`
+	IsDefault  bool                    `json:"is_default"`
+	IsEnabled  bool                    `json:"is_enabled"`
+	MatchJson  *map[string]interface{} `json:"match_json,omitempty"`
+	Priority   int                     `json:"priority"`
+	RuleType   string                  `json:"rule_type"`
+	TargetId   string                  `json:"target_id"`
+	TargetType string                  `json:"target_type"`
+	UpdatedAt  string                  `json:"updated_at"`
 }
 
 // ChatMessage defines model for ChatMessage.
@@ -4070,9 +4258,10 @@ type StartIntegrationAppResponse struct {
 
 // StartIntegrationOAuthRequest defines model for StartIntegrationOAuthRequest.
 type StartIntegrationOAuthRequest struct {
-	DisplayName      string `json:"display_name"`
-	IncludeUserToken *bool  `json:"include_user_token,omitempty"`
-	Provider         string `json:"provider"`
+	ConnectionId     *string `json:"connection_id,omitempty"`
+	DisplayName      string  `json:"display_name"`
+	IncludeUserToken *bool   `json:"include_user_token,omitempty"`
+	Provider         string  `json:"provider"`
 }
 
 // StartIntegrationOAuthResponse defines model for StartIntegrationOAuthResponse.
@@ -24590,7 +24779,7 @@ func (r AuditListAuditResponse) ContentType() string {
 type AuthzCheckAccessResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *map[string]interface{}
+	JSON200      *AuthzAccessCheckResult
 	JSON422      *HTTPValidationError
 }
 
@@ -24621,7 +24810,7 @@ func (r AuthzCheckAccessResponse) ContentType() string {
 type AuthzListAgentsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *[]map[string]interface{}
+	JSON200      *[]AuthzAgent
 }
 
 // Status returns HTTPResponse.Status
@@ -24651,7 +24840,7 @@ func (r AuthzListAgentsResponse) ContentType() string {
 type AuthzSetAgentRolesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *map[string]interface{}
+	JSON200      *AuthzAgent
 	JSON422      *HTTPValidationError
 }
 
@@ -24682,7 +24871,7 @@ func (r AuthzSetAgentRolesResponse) ContentType() string {
 type AuthzListCapabilitiesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *[]map[string]interface{}
+	JSON200      *[]AuthzCapabilityInfo
 }
 
 // Status returns HTTPResponse.Status
@@ -24712,7 +24901,7 @@ func (r AuthzListCapabilitiesResponse) ContentType() string {
 type AuthzListGrantsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *[]map[string]interface{}
+	JSON200      *[]AuthzGrant
 	JSON422      *HTTPValidationError
 }
 
@@ -24743,7 +24932,7 @@ func (r AuthzListGrantsResponse) ContentType() string {
 type AuthzCreateGrantResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON201      *map[string]interface{}
+	JSON201      *AuthzGrant
 	JSON422      *HTTPValidationError
 }
 
@@ -24804,7 +24993,7 @@ func (r AuthzDeleteGrantResponse) ContentType() string {
 type AuthzUpdateGrantResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *map[string]interface{}
+	JSON200      *AuthzGrant
 	JSON422      *HTTPValidationError
 }
 
@@ -24835,7 +25024,7 @@ func (r AuthzUpdateGrantResponse) ContentType() string {
 type AuthzListMembersResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *[]map[string]interface{}
+	JSON200      *[]AuthzMember
 }
 
 // Status returns HTTPResponse.Status
@@ -24865,7 +25054,7 @@ func (r AuthzListMembersResponse) ContentType() string {
 type AuthzSetMemberAttributesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *map[string]interface{}
+	JSON200      *AuthzMember
 	JSON422      *HTTPValidationError
 }
 
@@ -24896,7 +25085,7 @@ func (r AuthzSetMemberAttributesResponse) ContentType() string {
 type AuthzSetMemberRolesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *map[string]interface{}
+	JSON200      *AuthzMemberRoles
 	JSON422      *HTTPValidationError
 }
 
@@ -24927,7 +25116,7 @@ func (r AuthzSetMemberRolesResponse) ContentType() string {
 type AuthzListPoliciesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *[]map[string]interface{}
+	JSON200      *[]AuthzPolicy
 }
 
 // Status returns HTTPResponse.Status
@@ -24957,7 +25146,7 @@ func (r AuthzListPoliciesResponse) ContentType() string {
 type AuthzCreatePolicyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON201      *map[string]interface{}
+	JSON201      *AuthzPolicy
 	JSON422      *HTTPValidationError
 }
 
@@ -25018,7 +25207,7 @@ func (r AuthzDeletePolicyResponse) ContentType() string {
 type AuthzUpdatePolicyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *map[string]interface{}
+	JSON200      *AuthzPolicy
 	JSON422      *HTTPValidationError
 }
 
@@ -25049,7 +25238,7 @@ func (r AuthzUpdatePolicyResponse) ContentType() string {
 type AuthzListPrincipalsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *[]map[string]interface{}
+	JSON200      *[]AuthzPrincipal
 }
 
 // Status returns HTTPResponse.Status
@@ -25079,7 +25268,7 @@ func (r AuthzListPrincipalsResponse) ContentType() string {
 type AuthzEffectiveAccessResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *[]map[string]interface{}
+	JSON200      *[]AuthzEffectiveCapability
 	JSON422      *HTTPValidationError
 }
 
@@ -25110,7 +25299,7 @@ func (r AuthzEffectiveAccessResponse) ContentType() string {
 type AuthzListResourceTypesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *[]map[string]interface{}
+	JSON200      *[]AuthzResourceType
 }
 
 // Status returns HTTPResponse.Status
@@ -25140,7 +25329,7 @@ func (r AuthzListResourceTypesResponse) ContentType() string {
 type AuthzListRolesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *[]map[string]interface{}
+	JSON200      *[]AuthzRole
 }
 
 // Status returns HTTPResponse.Status
@@ -25170,7 +25359,7 @@ func (r AuthzListRolesResponse) ContentType() string {
 type AuthzCreateRoleResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON201      *map[string]interface{}
+	JSON201      *AuthzRole
 	JSON422      *HTTPValidationError
 }
 
@@ -25231,7 +25420,7 @@ func (r AuthzDeleteRoleResponse) ContentType() string {
 type AuthzUpdateRoleResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *map[string]interface{}
+	JSON200      *AuthzRole
 	JSON422      *HTTPValidationError
 }
 
@@ -25262,7 +25451,7 @@ func (r AuthzUpdateRoleResponse) ContentType() string {
 type AuthzListServiceAccountsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *[]map[string]interface{}
+	JSON200      *[]AuthzServiceAccount
 }
 
 // Status returns HTTPResponse.Status
@@ -25292,7 +25481,7 @@ func (r AuthzListServiceAccountsResponse) ContentType() string {
 type AuthzSetServiceAccountAttributesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *map[string]interface{}
+	JSON200      *AuthzServiceAccount
 	JSON422      *HTTPValidationError
 }
 
@@ -25323,7 +25512,7 @@ func (r AuthzSetServiceAccountAttributesResponse) ContentType() string {
 type AuthzSetServiceAccountRolesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *map[string]interface{}
+	JSON200      *AuthzServiceAccountRoles
 	JSON422      *HTTPValidationError
 }
 
@@ -25354,7 +25543,7 @@ func (r AuthzSetServiceAccountRolesResponse) ContentType() string {
 type ChannelsListChannelsEndpointResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *[]map[string]interface{}
+	JSON200      *[]ChannelResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -25384,7 +25573,7 @@ func (r ChannelsListChannelsEndpointResponse) ContentType() string {
 type ChannelsCreateChannelEndpointResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON201      *map[string]interface{}
+	JSON201      *ChannelResponse
 	JSON422      *HTTPValidationError
 }
 
@@ -25445,7 +25634,7 @@ func (r ChannelsDeleteChannelEndpointResponse) ContentType() string {
 type ChannelsGetChannelEndpointResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *map[string]interface{}
+	JSON200      *ChannelResponse
 	JSON422      *HTTPValidationError
 }
 
@@ -25476,7 +25665,7 @@ func (r ChannelsGetChannelEndpointResponse) ContentType() string {
 type ChannelsUpdateChannelEndpointResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *map[string]interface{}
+	JSON200      *ChannelResponse
 	JSON422      *HTTPValidationError
 }
 
@@ -25507,7 +25696,7 @@ func (r ChannelsUpdateChannelEndpointResponse) ContentType() string {
 type ChannelsPauseChannelEndpointResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *map[string]interface{}
+	JSON200      *ChannelResponse
 	JSON422      *HTTPValidationError
 }
 
@@ -25538,7 +25727,7 @@ func (r ChannelsPauseChannelEndpointResponse) ContentType() string {
 type ChannelsResumeChannelEndpointResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *map[string]interface{}
+	JSON200      *ChannelResponse
 	JSON422      *HTTPValidationError
 }
 
@@ -25569,7 +25758,7 @@ func (r ChannelsResumeChannelEndpointResponse) ContentType() string {
 type ChannelsListRoutesEndpointResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *[]map[string]interface{}
+	JSON200      *[]ChannelRouteResponse
 	JSON422      *HTTPValidationError
 }
 
@@ -25600,7 +25789,7 @@ func (r ChannelsListRoutesEndpointResponse) ContentType() string {
 type ChannelsAddRouteEndpointResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON201      *map[string]interface{}
+	JSON201      *ChannelRouteResponse
 	JSON422      *HTTPValidationError
 }
 
@@ -25661,7 +25850,7 @@ func (r ChannelsDeleteRouteEndpointResponse) ContentType() string {
 type ChannelsUpdateRouteEndpointResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *map[string]interface{}
+	JSON200      *ChannelRouteResponse
 	JSON422      *HTTPValidationError
 }
 
@@ -35504,7 +35693,7 @@ func ParseAuthzCheckAccessResponse(rsp *http.Response) (*AuthzCheckAccessRespons
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest map[string]interface{}
+		var dest AuthzAccessCheckResult
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -35537,7 +35726,7 @@ func ParseAuthzListAgentsResponse(rsp *http.Response) (*AuthzListAgentsResponse,
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest []map[string]interface{}
+		var dest []AuthzAgent
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -35563,7 +35752,7 @@ func ParseAuthzSetAgentRolesResponse(rsp *http.Response) (*AuthzSetAgentRolesRes
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest map[string]interface{}
+		var dest AuthzAgent
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -35596,7 +35785,7 @@ func ParseAuthzListCapabilitiesResponse(rsp *http.Response) (*AuthzListCapabilit
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest []map[string]interface{}
+		var dest []AuthzCapabilityInfo
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -35622,7 +35811,7 @@ func ParseAuthzListGrantsResponse(rsp *http.Response) (*AuthzListGrantsResponse,
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest []map[string]interface{}
+		var dest []AuthzGrant
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -35655,7 +35844,7 @@ func ParseAuthzCreateGrantResponse(rsp *http.Response) (*AuthzCreateGrantRespons
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest map[string]interface{}
+		var dest AuthzGrant
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -35714,7 +35903,7 @@ func ParseAuthzUpdateGrantResponse(rsp *http.Response) (*AuthzUpdateGrantRespons
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest map[string]interface{}
+		var dest AuthzGrant
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -35747,7 +35936,7 @@ func ParseAuthzListMembersResponse(rsp *http.Response) (*AuthzListMembersRespons
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest []map[string]interface{}
+		var dest []AuthzMember
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -35773,7 +35962,7 @@ func ParseAuthzSetMemberAttributesResponse(rsp *http.Response) (*AuthzSetMemberA
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest map[string]interface{}
+		var dest AuthzMember
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -35806,7 +35995,7 @@ func ParseAuthzSetMemberRolesResponse(rsp *http.Response) (*AuthzSetMemberRolesR
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest map[string]interface{}
+		var dest AuthzMemberRoles
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -35839,7 +36028,7 @@ func ParseAuthzListPoliciesResponse(rsp *http.Response) (*AuthzListPoliciesRespo
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest []map[string]interface{}
+		var dest []AuthzPolicy
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -35865,7 +36054,7 @@ func ParseAuthzCreatePolicyResponse(rsp *http.Response) (*AuthzCreatePolicyRespo
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest map[string]interface{}
+		var dest AuthzPolicy
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -35924,7 +36113,7 @@ func ParseAuthzUpdatePolicyResponse(rsp *http.Response) (*AuthzUpdatePolicyRespo
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest map[string]interface{}
+		var dest AuthzPolicy
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -35957,7 +36146,7 @@ func ParseAuthzListPrincipalsResponse(rsp *http.Response) (*AuthzListPrincipalsR
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest []map[string]interface{}
+		var dest []AuthzPrincipal
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -35983,7 +36172,7 @@ func ParseAuthzEffectiveAccessResponse(rsp *http.Response) (*AuthzEffectiveAcces
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest []map[string]interface{}
+		var dest []AuthzEffectiveCapability
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -36016,7 +36205,7 @@ func ParseAuthzListResourceTypesResponse(rsp *http.Response) (*AuthzListResource
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest []map[string]interface{}
+		var dest []AuthzResourceType
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -36042,7 +36231,7 @@ func ParseAuthzListRolesResponse(rsp *http.Response) (*AuthzListRolesResponse, e
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest []map[string]interface{}
+		var dest []AuthzRole
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -36068,7 +36257,7 @@ func ParseAuthzCreateRoleResponse(rsp *http.Response) (*AuthzCreateRoleResponse,
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest map[string]interface{}
+		var dest AuthzRole
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -36127,7 +36316,7 @@ func ParseAuthzUpdateRoleResponse(rsp *http.Response) (*AuthzUpdateRoleResponse,
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest map[string]interface{}
+		var dest AuthzRole
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -36160,7 +36349,7 @@ func ParseAuthzListServiceAccountsResponse(rsp *http.Response) (*AuthzListServic
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest []map[string]interface{}
+		var dest []AuthzServiceAccount
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -36186,7 +36375,7 @@ func ParseAuthzSetServiceAccountAttributesResponse(rsp *http.Response) (*AuthzSe
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest map[string]interface{}
+		var dest AuthzServiceAccount
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -36219,7 +36408,7 @@ func ParseAuthzSetServiceAccountRolesResponse(rsp *http.Response) (*AuthzSetServ
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest map[string]interface{}
+		var dest AuthzServiceAccountRoles
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -36252,7 +36441,7 @@ func ParseChannelsListChannelsEndpointResponse(rsp *http.Response) (*ChannelsLis
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest []map[string]interface{}
+		var dest []ChannelResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -36278,7 +36467,7 @@ func ParseChannelsCreateChannelEndpointResponse(rsp *http.Response) (*ChannelsCr
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest map[string]interface{}
+		var dest ChannelResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -36337,7 +36526,7 @@ func ParseChannelsGetChannelEndpointResponse(rsp *http.Response) (*ChannelsGetCh
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest map[string]interface{}
+		var dest ChannelResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -36370,7 +36559,7 @@ func ParseChannelsUpdateChannelEndpointResponse(rsp *http.Response) (*ChannelsUp
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest map[string]interface{}
+		var dest ChannelResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -36403,7 +36592,7 @@ func ParseChannelsPauseChannelEndpointResponse(rsp *http.Response) (*ChannelsPau
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest map[string]interface{}
+		var dest ChannelResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -36436,7 +36625,7 @@ func ParseChannelsResumeChannelEndpointResponse(rsp *http.Response) (*ChannelsRe
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest map[string]interface{}
+		var dest ChannelResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -36469,7 +36658,7 @@ func ParseChannelsListRoutesEndpointResponse(rsp *http.Response) (*ChannelsListR
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest []map[string]interface{}
+		var dest []ChannelRouteResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -36502,7 +36691,7 @@ func ParseChannelsAddRouteEndpointResponse(rsp *http.Response) (*ChannelsAddRout
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest map[string]interface{}
+		var dest ChannelRouteResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -36561,7 +36750,7 @@ func ParseChannelsUpdateRouteEndpointResponse(rsp *http.Response) (*ChannelsUpda
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest map[string]interface{}
+		var dest ChannelRouteResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
