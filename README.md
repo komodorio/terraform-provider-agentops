@@ -55,11 +55,20 @@ export AGENTOPS_ENDPOINT="https://staging.agentops.komodor.com" # optional
 
 ### Resources and data sources
 
-| Type        | Name                           | Description                                       |
-| ----------- | ------------------------------ | ------------------------------------------------- |
-| Resource    | `agentops_trigger`             | Webhook trigger that invokes an agent or workflow |
-| Resource    | `agentops_api_key`             | API key (create/delete only; secret shown once)   |
-| Data source | `agentops_integration_catalog` | Integration providers available to the account    |
+| Type        | Name                              | Description                                       |
+| ----------- | --------------------------------- | ------------------------------------------------- |
+| Resource    | `agentops_trigger`                | Webhook trigger that invokes an agent or workflow |
+| Resource    | `agentops_api_key`                | API key (create/delete only; secret shown once)   |
+| Resource    | `agentops_service_account`        | Service account (create/delete only)              |
+| Resource    | `agentops_schedule`               | Cron schedule that runs an agent                  |
+| Resource    | `agentops_credential`             | Stored credential with a write-only value         |
+| Resource    | `agentops_workflow`               | Multi-step agent workflow                         |
+| Resource    | `agentops_integration_connection` | Connection to an external integration provider    |
+| Resource    | `agentops_knowledge_base`         | Knowledge base for agents                         |
+| Resource    | `agentops_mcp_gateway_server`     | Upstream MCP server registered on the gateway     |
+| Resource    | `agentops_mcp_gateway_group`      | Group of MCP gateway servers                      |
+| Resource    | `agentops_mcp_gateway_policy`     | MCP gateway access policy                         |
+| Data source | `agentops_integration_catalog`    | Integration providers available to the account    |
 
 More resources are added over time. See [`docs/`](./docs) for the full,
 generated reference and [`examples/`](./examples) for usage examples.
