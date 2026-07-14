@@ -38,3 +38,14 @@ resource "agentops_knowledge_base" "runbooks" {
 - `id` (String) Knowledge base identifier.
 - `indexed_count` (Number) Number of documents that have been indexed.
 - `updated_at` (String) Last-update timestamp.
+
+## Import
+
+Import is supported using the following syntax:
+
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
+
+```shell
+# Knowledge bases are imported by their id.
+terraform import agentops_knowledge_base.runbooks kb_01hxyz
+```

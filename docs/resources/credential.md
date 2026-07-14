@@ -46,3 +46,14 @@ resource "agentops_credential" "openai" {
 - `last_replaced_at` (String) Timestamp of the last value replacement.
 - `last_used_at` (String) Timestamp the credential was last used.
 - `updated_at` (String) Last-update timestamp.
+
+## Import
+
+Import is supported using the following syntax:
+
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
+
+```shell
+# Credentials are imported by their id.
+terraform import agentops_credential.openai cred_01hxyz
+```

@@ -49,3 +49,14 @@ resource "agentops_grant" "sre_deployer" {
 
 - `created_at` (String) Timestamp the grant was created (server-derived).
 - `id` (String) Grant identifier.
+
+## Import
+
+Import is supported using the following syntax:
+
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
+
+```shell
+# Grants are imported by their id.
+terraform import agentops_grant.sre_deployer grant_01hxyz
+```
