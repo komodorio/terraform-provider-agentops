@@ -1,12 +1,12 @@
-output "subject_id" {
-  description = "Principal id the wildcard grants are bound to."
-  value       = agentops_service_account.fleet_ops.id
+output "policy_id" {
+  description = "ID of the glob-scoped production policy."
+  value       = agentops_policy.prod_agents.id
 }
 
 output "grant_ids" {
-  description = "IDs of the capability and role grants."
+  description = "IDs of the role binding and standalone capability grants."
   value = {
-    read_all    = agentops_grant.read_all_agents.id
-    operate_all = agentops_grant.operate_all_agents.id
+    role_binding = agentops_grant.ci_prod_operator.id
+    read_prod    = agentops_grant.read_prod_agents.id
   }
 }
