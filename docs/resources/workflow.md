@@ -48,3 +48,14 @@ resource "agentops_workflow" "triage" {
 - `created_at` (String) Creation timestamp.
 - `id` (String) Workflow identifier.
 - `updated_at` (String) Last-update timestamp.
+
+## Import
+
+Import is supported using the following syntax:
+
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
+
+```shell
+# Workflows are imported by their id.
+terraform import agentops_workflow.triage wf_01hxyz
+```

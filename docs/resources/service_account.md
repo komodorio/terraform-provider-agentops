@@ -35,3 +35,14 @@ resource "agentops_service_account" "ci" {
 - `id` (String) Service account identifier (principal ID).
 - `source` (String) Origin of the service account.
 - `status` (String) Service account status.
+
+## Import
+
+Import is supported using the following syntax:
+
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
+
+```shell
+# Service accounts are imported by their principal id.
+terraform import agentops_service_account.ci sa_01hxyz
+```

@@ -38,3 +38,14 @@ resource "agentops_member" "dev" {
 - `last_login_at` (String) Timestamp of the member's last login.
 - `status` (String) Member status.
 - `user_id` (String) User identifier associated with the member.
+
+## Import
+
+Import is supported using the following syntax:
+
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
+
+```shell
+# Members are imported by their principal id.
+terraform import agentops_member.dev mbr_01hxyz
+```

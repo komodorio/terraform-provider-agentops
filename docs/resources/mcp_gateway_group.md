@@ -35,3 +35,14 @@ resource "agentops_mcp_gateway_group" "core" {
 ### Read-Only
 
 - `id` (String) Group identifier.
+
+## Import
+
+Import is supported using the following syntax:
+
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
+
+```shell
+# MCP gateway groups are imported by their id.
+terraform import agentops_mcp_gateway_group.core grp_01hxyz
+```

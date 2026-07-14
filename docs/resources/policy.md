@@ -41,3 +41,14 @@ resource "agentops_policy" "deploy" {
 - `builtin` (Boolean) Whether the policy is a built-in policy managed by the system.
 - `created_at` (String) Timestamp at which the policy was created.
 - `id` (String) Policy identifier.
+
+## Import
+
+Import is supported using the following syntax:
+
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
+
+```shell
+# Policies are imported by their id.
+terraform import agentops_policy.deploy pol_01hxyz
+```

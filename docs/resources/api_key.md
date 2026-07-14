@@ -49,3 +49,14 @@ output "ci_api_key" {
 - `key` (String, Sensitive) The secret key value. Returned only at creation; store it securely.
 - `principal_id` (String) ID of the principal the key authenticates as.
 - `status` (String) Key status (`active` or `revoked`).
+
+## Import
+
+Import is supported using the following syntax:
+
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
+
+```shell
+# API keys are imported by their id.
+terraform import agentops_api_key.ci key_01hxyz
+```

@@ -37,3 +37,14 @@ resource "agentops_role" "deployer" {
 - `builtin` (Boolean) Whether the role is built in and managed by the system.
 - `holders` (Number) Number of holders currently granted this role.
 - `id` (String) Role identifier.
+
+## Import
+
+Import is supported using the following syntax:
+
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
+
+```shell
+# Roles are imported by their id.
+terraform import agentops_role.deployer role_01hxyz
+```

@@ -47,3 +47,14 @@ resource "agentops_schedule" "nightly" {
 - `source_id` (String) Identifier of the schedule's source.
 - `trigger_type` (String) Type of trigger backing this schedule.
 - `updated_at` (String) Last-update timestamp.
+
+## Import
+
+Import is supported using the following syntax:
+
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
+
+```shell
+# Schedules are imported by their id.
+terraform import agentops_schedule.nightly sch_01hxyz
+```
