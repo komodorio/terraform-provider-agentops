@@ -75,18 +75,22 @@ resource "agentops_incident_pipeline" "prod" {
     severity    = "critical"
   }
 
+  # Bindings reference the agent's runtime_agent_id — the opaque id the run
+  # dispatcher resolves against — NOT the resource `id` (a hosted-agent record
+  # PK, which the dispatcher can't resolve, so alerts would create an incident
+  # but never dispatch the orchestrator run).
   orchestrator_binding = {
-    agent_id = agentops_worker_catalog_deployment.orchestrator.id
+    agent_id = agentops_worker_catalog_deployment.orchestrator.runtime_agent_id
   }
 
   specialist_bindings = [
     {
-      agent_id = agentops_hosted_agent.db_specialist.id
+      agent_id = agentops_hosted_agent.db_specialist.runtime_agent_id
       role     = "database"
       enabled  = true
     },
     {
-      agent_id = agentops_hosted_agent.net_specialist.id
+      agent_id = agentops_hosted_agent.net_specialist.runtime_agent_id
       role     = "networking"
       enabled  = true
     },
@@ -99,17 +103,17 @@ resource "agentops_incident_pipeline" "prod" {
 
 ### Required
 
-- `alert_source` (Attributes) Where inbound alerts originate. (see [below for nested schema](#nestedatt--alert_source))
+- `alert_source` (Attributes) Where inbound alerts originate. Changing it forces a new pipeline. (see [below for nested schema](#nestedatt--alert_source))
 
 ### Optional
 
-- `delivery_config` (Attributes) Where incident summaries are delivered. (see [below for nested schema](#nestedatt--delivery_config))
-- `name` (String) Human-readable pipeline name. Server-assigned when omitted.
-- `orchestrator_binding` (Attributes) The orchestrator agent that triages routed incidents. Server-provisioned when omitted. (see [below for nested schema](#nestedatt--orchestrator_binding))
-- `routing_rule` (Attributes) Which incidents this pipeline handles. Defaults to routing everything. (see [below for nested schema](#nestedatt--routing_rule))
-- `specialist_bindings` (Attributes List) Specialist agents the orchestrator can delegate to. (see [below for nested schema](#nestedatt--specialist_bindings))
+- `delivery_config` (Attributes) Where incident summaries are delivered. Changing it forces a new pipeline. (see [below for nested schema](#nestedatt--delivery_config))
+- `name` (String) Human-readable pipeline name. Server-assigned when omitted. Changing it forces a new pipeline.
+- `orchestrator_binding` (Attributes) The orchestrator agent that triages routed incidents. Server-provisioned when omitted. Changing it forces a new pipeline. (see [below for nested schema](#nestedatt--orchestrator_binding))
+- `routing_rule` (Attributes) Which incidents this pipeline handles. Defaults to routing everything. Changing it forces a new pipeline. (see [below for nested schema](#nestedatt--routing_rule))
+- `specialist_bindings` (Attributes List) Specialist agents the orchestrator can delegate to. Changing them forces a new pipeline. (see [below for nested schema](#nestedatt--specialist_bindings))
 - `status` (String) Lifecycle status. Newly created pipelines start as `draft`; set to `active` or `paused` to publish or suspend the pipeline. One of `draft`, `active`, `paused`.
-- `trigger_id` (String) ID of the webhook trigger backing this pipeline.
+- `trigger_id` (String) ID of the webhook trigger backing this pipeline. Changing it forces a new pipeline.
 
 ### Read-Only
 

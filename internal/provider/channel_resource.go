@@ -200,6 +200,19 @@ func (r *channelResource) Create(ctx context.Context, req resource.CreateRequest
 	}
 
 	desired := statusTarget(plan.Status)
+
+	// The channel now exists server-side. Persist state before reconciling status so a
+	// failed pause/resume still leaves the channel tracked and destroyable rather than
+	// orphaned on the server.
+	if diags := channelApply(ctx, &plan, apiResp.JSON201); diags.HasError() {
+		resp.Diagnostics.Append(diags...)
+		return
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	detail := r.reconcileStatus(ctx, apiResp.JSON201.Id, desired, apiResp.JSON201, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return

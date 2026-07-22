@@ -60,18 +60,22 @@ resource "agentops_incident_pipeline" "prod" {
     severity    = "critical"
   }
 
+  # Bindings reference the agent's runtime_agent_id — the opaque id the run
+  # dispatcher resolves against — NOT the resource `id` (a hosted-agent record
+  # PK, which the dispatcher can't resolve, so alerts would create an incident
+  # but never dispatch the orchestrator run).
   orchestrator_binding = {
-    agent_id = agentops_worker_catalog_deployment.orchestrator.id
+    agent_id = agentops_worker_catalog_deployment.orchestrator.runtime_agent_id
   }
 
   specialist_bindings = [
     {
-      agent_id = agentops_hosted_agent.db_specialist.id
+      agent_id = agentops_hosted_agent.db_specialist.runtime_agent_id
       role     = "database"
       enabled  = true
     },
     {
-      agent_id = agentops_hosted_agent.net_specialist.id
+      agent_id = agentops_hosted_agent.net_specialist.runtime_agent_id
       role     = "networking"
       enabled  = true
     },

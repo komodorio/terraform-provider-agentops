@@ -41,13 +41,13 @@ resource "agentops_review_workflow" "backend" {
 
 ### Required
 
-- `reviewer_agent_ids` (List of String) IDs of the reviewer agents that run against matching pull requests.
+- `reviewer_agent_ids` (List of String) IDs of the reviewer agents that run against matching pull requests. Changing them forces a new workflow.
 
 ### Optional
 
-- `base_branch_filter` (String) Only review pull requests targeting this base branch. Reviews all branches when omitted.
-- `name` (String) Human-readable workflow name. Server-assigned when omitted.
-- `repos` (Attributes List) GitHub repositories this workflow reviews. (see [below for nested schema](#nestedatt--repos))
+- `base_branch_filter` (String) Only review pull requests targeting this base branch. Reviews all branches when omitted. Changing it forces a new workflow.
+- `name` (String) Human-readable workflow name. Server-assigned when omitted. Changing it forces a new workflow.
+- `repos` (Attributes List) GitHub repositories this workflow reviews. Changing them forces a new workflow. (see [below for nested schema](#nestedatt--repos))
 - `status` (String) Lifecycle status. Newly created workflows start as `draft`; set to `active` or `paused` to publish or suspend the workflow. One of `draft`, `active`, `paused`.
 
 ### Read-Only

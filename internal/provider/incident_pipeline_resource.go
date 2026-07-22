@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -106,11 +107,15 @@ func (r *incidentPipelineResource) Schema(ctx context.Context, req resource.Sche
 				Computed:            true,
 				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
+			// The API only allows updating a pipeline while it is `draft`, and a published
+			// (active/paused) pipeline never returns to draft — so every config-bearing
+			// attribute forces replacement. Only `status` changes in place (via the
+			// activate/pause endpoints).
 			"name": schema.StringAttribute{
-				MarkdownDescription: "Human-readable pipeline name. Server-assigned when omitted.",
+				MarkdownDescription: "Human-readable pipeline name. Server-assigned when omitted. Changing it forces a new pipeline.",
 				Optional:            true,
 				Computed:            true,
-				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown(), stringplanmodifier.RequiresReplace()},
 			},
 			"status": schema.StringAttribute{
 				MarkdownDescription: "Lifecycle status. Newly created pipelines start as `draft`; set to " +
@@ -120,8 +125,9 @@ func (r *incidentPipelineResource) Schema(ctx context.Context, req resource.Sche
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"alert_source": schema.SingleNestedAttribute{
-				MarkdownDescription: "Where inbound alerts originate.",
+				MarkdownDescription: "Where inbound alerts originate. Changing it forces a new pipeline.",
 				Required:            true,
+				PlanModifiers:       []planmodifier.Object{objectplanmodifier.RequiresReplace()},
 				Attributes: map[string]schema.Attribute{
 					"provider": schema.StringAttribute{
 						MarkdownDescription: "Alert provider. One of `datadog`, `generic`.",
@@ -139,10 +145,10 @@ func (r *incidentPipelineResource) Schema(ctx context.Context, req resource.Sche
 				},
 			},
 			"routing_rule": schema.SingleNestedAttribute{
-				MarkdownDescription: "Which incidents this pipeline handles. Defaults to routing everything.",
+				MarkdownDescription: "Which incidents this pipeline handles. Defaults to routing everything. Changing it forces a new pipeline.",
 				Optional:            true,
 				Computed:            true,
-				PlanModifiers:       []planmodifier.Object{objectplanmodifier.UseStateForUnknown()},
+				PlanModifiers:       []planmodifier.Object{objectplanmodifier.UseStateForUnknown(), objectplanmodifier.RequiresReplace()},
 				Attributes: map[string]schema.Attribute{
 					"route_all": schema.BoolAttribute{
 						MarkdownDescription: "Route every incident, ignoring the filters below.",
@@ -176,10 +182,10 @@ func (r *incidentPipelineResource) Schema(ctx context.Context, req resource.Sche
 				},
 			},
 			"orchestrator_binding": schema.SingleNestedAttribute{
-				MarkdownDescription: "The orchestrator agent that triages routed incidents. Server-provisioned when omitted.",
+				MarkdownDescription: "The orchestrator agent that triages routed incidents. Server-provisioned when omitted. Changing it forces a new pipeline.",
 				Optional:            true,
 				Computed:            true,
-				PlanModifiers:       []planmodifier.Object{objectplanmodifier.UseStateForUnknown()},
+				PlanModifiers:       []planmodifier.Object{objectplanmodifier.UseStateForUnknown(), objectplanmodifier.RequiresReplace()},
 				Attributes: map[string]schema.Attribute{
 					"agent_id": schema.StringAttribute{
 						MarkdownDescription: "ID of the orchestrator agent.",
@@ -188,8 +194,9 @@ func (r *incidentPipelineResource) Schema(ctx context.Context, req resource.Sche
 				},
 			},
 			"specialist_bindings": schema.ListNestedAttribute{
-				MarkdownDescription: "Specialist agents the orchestrator can delegate to.",
+				MarkdownDescription: "Specialist agents the orchestrator can delegate to. Changing them forces a new pipeline.",
 				Optional:            true,
+				PlanModifiers:       []planmodifier.List{listplanmodifier.RequiresReplace()},
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"agent_id": schema.StringAttribute{
@@ -208,8 +215,9 @@ func (r *incidentPipelineResource) Schema(ctx context.Context, req resource.Sche
 				},
 			},
 			"delivery_config": schema.SingleNestedAttribute{
-				MarkdownDescription: "Where incident summaries are delivered.",
+				MarkdownDescription: "Where incident summaries are delivered. Changing it forces a new pipeline.",
 				Optional:            true,
+				PlanModifiers:       []planmodifier.Object{objectplanmodifier.RequiresReplace()},
 				Attributes: map[string]schema.Attribute{
 					"slack": schema.SingleNestedAttribute{
 						MarkdownDescription: "Slack delivery target.",
@@ -236,10 +244,10 @@ func (r *incidentPipelineResource) Schema(ctx context.Context, req resource.Sche
 				},
 			},
 			"trigger_id": schema.StringAttribute{
-				MarkdownDescription: "ID of the webhook trigger backing this pipeline.",
+				MarkdownDescription: "ID of the webhook trigger backing this pipeline. Changing it forces a new pipeline.",
 				Optional:            true,
 				Computed:            true,
-				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown(), stringplanmodifier.RequiresReplace()},
 			},
 			"source_provider": schema.StringAttribute{
 				MarkdownDescription: "Resolved alert provider for the pipeline.",
@@ -319,9 +327,26 @@ func (r *incidentPipelineResource) Create(ctx context.Context, req resource.Crea
 	desired := statusTarget(plan.Status)
 	detail := apiResp.JSON201
 
+	// Capture the configured trigger before incidentPipelineApply overwrites plan with
+	// the server response (the create endpoint does not accept a trigger, so the response
+	// reports trigger_id as null).
+	configuredTrigger := plan.TriggerID
+
+	// The pipeline now exists server-side (as `draft`). Persist state immediately so a
+	// failure in the endpoint-linking or activation steps below still leaves the
+	// resource tracked and destroyable, rather than orphaning it on the server.
+	if diags := incidentPipelineApply(ctx, &plan, detail); diags.HasError() {
+		resp.Diagnostics.Append(diags...)
+		return
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	// The create endpoint does not accept a trigger (endpoint); link it via update so
 	// the pipeline can be activated — activation requires a linked endpoint.
-	if v := plan.TriggerID; !v.IsNull() && !v.IsUnknown() && v.ValueString() != "" {
+	if v := configuredTrigger; !v.IsNull() && !v.IsUnknown() && v.ValueString() != "" {
 		linked, err := r.client.Gen.IncidentPipelinesUpdateIncidentPipelineEndpointWithResponse(ctx, detail.Id,
 			gen.UpdateIncidentPipelineRequest{TriggerId: stringToPtr(v)})
 		if err != nil {
@@ -334,6 +359,14 @@ func (r *incidentPipelineResource) Create(ctx context.Context, req resource.Crea
 		}
 		if linked.JSON200 != nil {
 			detail = linked.JSON200
+			if diags := incidentPipelineApply(ctx, &plan, detail); diags.HasError() {
+				resp.Diagnostics.Append(diags...)
+				return
+			}
+			resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+			if resp.Diagnostics.HasError() {
+				return
+			}
 		}
 	}
 
@@ -388,31 +421,21 @@ func (r *incidentPipelineResource) Update(ctx context.Context, req resource.Upda
 		return
 	}
 
-	alertSource := incidentPipelineAlertSourceToAPI(plan.AlertSource)
-	body := gen.UpdateIncidentPipelineRequest{
-		Name:                stringToPtr(plan.Name),
-		AlertSource:         &alertSource,
-		RoutingRule:         incidentPipelineRoutingRuleToAPI(ctx, plan.RoutingRule, &resp.Diagnostics),
-		OrchestratorBinding: incidentPipelineBindingToAPI(plan.OrchestratorBinding),
-		SpecialistBindings:  incidentPipelineSpecialistsToAPI(plan.SpecialistBindings),
-		DeliveryConfig:      incidentPipelineDeliveryToAPI(plan.DeliveryConfig),
-		TriggerId:           stringToPtr(plan.TriggerID),
-	}
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	apiResp, err := r.client.Gen.IncidentPipelinesUpdateIncidentPipelineEndpointWithResponse(ctx, plan.ID.ValueString(), body)
+	// Every config-bearing attribute forces replacement (see the schema), because the
+	// API only accepts config updates while a pipeline is `draft` and a published
+	// pipeline never returns to draft. So the only in-place change that reaches Update is
+	// a `status` transition, driven via the activate/pause endpoints — no PATCH here.
+	apiResp, err := r.client.Gen.IncidentPipelinesGetIncidentPipelineEndpointWithResponse(ctx, plan.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Error updating incident pipeline", err.Error())
+		resp.Diagnostics.AddError("Error reading incident pipeline", err.Error())
 		return
 	}
 	if err := client.Check(apiResp.HTTPResponse, apiResp.Body); err != nil {
-		resp.Diagnostics.AddError("Error updating incident pipeline", err.Error())
+		resp.Diagnostics.AddError("Error reading incident pipeline", err.Error())
 		return
 	}
 	if apiResp.JSON200 == nil {
-		resp.Diagnostics.AddError("Error updating incident pipeline", "API returned an empty body")
+		resp.Diagnostics.AddError("Error reading incident pipeline", "API returned an empty body")
 		return
 	}
 
@@ -434,6 +457,19 @@ func (r *incidentPipelineResource) Delete(ctx context.Context, req resource.Dele
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	// An active pipeline cannot be deleted; the API requires it to be paused first.
+	if state.Status.ValueString() == "active" {
+		paused, err := r.client.Gen.IncidentPipelinesPauseIncidentPipelineEndpointWithResponse(ctx, state.ID.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Error pausing incident pipeline before delete", err.Error())
+			return
+		}
+		if err := client.Check(paused.HTTPResponse, paused.Body); err != nil && !client.IsNotFound(err) {
+			resp.Diagnostics.AddError("Error pausing incident pipeline before delete", err.Error())
+			return
+		}
 	}
 
 	apiResp, err := r.client.Gen.IncidentPipelinesDeleteIncidentPipelineEndpointWithResponse(ctx, state.ID.ValueString())
@@ -598,7 +634,11 @@ func incidentPipelineApply(ctx context.Context, m *incidentPipelineResourceModel
 		Severity:            ptrToString(d.RoutingRule.Severity),
 		Tags:                types.MapNull(types.StringType),
 	}
-	if d.RoutingRule.Tags != nil {
+	// Only populate tags when the server returns a non-empty map. `tags` is optional
+	// (not computed), so an omitted config leaves the planned value null; the API echoes
+	// back an empty map, which we normalize back to null to avoid a "provider produced
+	// inconsistent result after apply" (was null, now empty map) error.
+	if d.RoutingRule.Tags != nil && len(*d.RoutingRule.Tags) > 0 {
 		tags, dg := types.MapValueFrom(ctx, types.StringType, *d.RoutingRule.Tags)
 		diags.Append(dg...)
 		rule.Tags = tags

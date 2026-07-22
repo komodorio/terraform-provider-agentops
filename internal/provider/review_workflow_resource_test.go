@@ -46,6 +46,55 @@ func TestAccReviewWorkflowResource(t *testing.T) {
 	})
 }
 
+// TestAccReviewWorkflowResource_configChangeForcesReplace verifies that changing a
+// config-bearing attribute on a published (active) workflow forces replacement rather than
+// an in-place update. The API only accepts config updates while a workflow is draft, so an
+// in-place PATCH of an active workflow would fail (the mock rejects it); a successful apply
+// proves the change went through destroy+recreate (which also pauses before deleting).
+func TestAccReviewWorkflowResource_configChangeForcesReplace(t *testing.T) {
+	mock := newMockServer(t)
+
+	config := func(branch string) string {
+		return mockProviderConfig(mock.URL) + fmt.Sprintf(`
+resource "agentops_review_workflow" "repl" {
+  name               = "pr-reviews-repl"
+  status             = "active"
+  base_branch_filter = %q
+  reviewer_agent_ids = ["agent_rev_1"]
+
+  repos = [
+    {
+      repo_owner = "komodorio"
+      repo_name  = "mono"
+    },
+  ]
+}
+`, branch)
+	}
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config("main"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("agentops_review_workflow.repl", "status", "active"),
+					resource.TestCheckResourceAttr("agentops_review_workflow.repl", "base_branch_filter", "main"),
+				),
+			},
+			{
+				// Changing base_branch_filter on the active workflow must recreate it and re-activate.
+				Config: config("develop"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("agentops_review_workflow.repl", "status", "active"),
+					resource.TestCheckResourceAttr("agentops_review_workflow.repl", "base_branch_filter", "develop"),
+				),
+			},
+		},
+	})
+}
+
 func testAccReviewWorkflowConfig(endpoint, status string) string {
 	return mockProviderConfig(endpoint) + fmt.Sprintf(`
 resource "agentops_review_workflow" "test" {
