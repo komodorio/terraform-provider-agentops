@@ -55,6 +55,12 @@ type mockServer struct {
 	bindings    map[string]map[string]map[string]any // credential_id -> agent_id -> binding
 	kbAgents    map[string]map[string]map[string]any // kb_id -> agent_id -> grant
 	stores      map[string]map[string]map[string]any // generic CRUD: collection -> id -> record
+	incidentPls map[string]map[string]any            // incident pipelines
+	reviewWfs   map[string]map[string]any            // review workflows
+	graderCfgs  map[string]map[string]any            // grader configs
+	channels    map[string]map[string]any            // channels
+	chanRoutes  map[string]map[string]map[string]any // channel_id -> route_id -> route
+	hostedAgs   map[string]map[string]any            // "customer/agent_id" -> hosted agent
 	seq         int
 }
 
@@ -73,6 +79,22 @@ var (
 	policyRe     = regexp.MustCompile(`^/api/v1/gateway/admin/policies/([^/]+)$`)
 )
 
+var (
+	incidentPipelineIDRe     = regexp.MustCompile(`^/api/v1/incident-pipelines/([^/]+)$`)
+	incidentPipelineActionRe = regexp.MustCompile(`^/api/v1/incident-pipelines/([^/]+)/(activate|pause)$`)
+	reviewWorkflowIDRe       = regexp.MustCompile(`^/api/v1/review-workflows/([^/]+)$`)
+	reviewWorkflowActionRe   = regexp.MustCompile(`^/api/v1/review-workflows/([^/]+)/(activate|pause)$`)
+)
+
+var (
+	graderConfigIDRe    = regexp.MustCompile(`^/api/v1/grader-configs/([^/]+)$`)
+	channelIDRe         = regexp.MustCompile(`^/api/v1/channels/([^/]+)$`)
+	channelActionRe     = regexp.MustCompile(`^/api/v1/channels/([^/]+)/(pause|resume)$`)
+	channelRoutesRe     = regexp.MustCompile(`^/api/v1/channels/([^/]+)/routes$`)
+	channelRouteIDRe    = regexp.MustCompile(`^/api/v1/channels/([^/]+)/routes/([^/]+)$`)
+	hostedAgentByPathRe = regexp.MustCompile(`^/api/v1/hosted-agents/([^/]+)/([^/]+)$`)
+)
+
 func newMockServer(t *testing.T) *mockServer {
 	t.Helper()
 	m := &mockServer{
@@ -85,6 +107,12 @@ func newMockServer(t *testing.T) *mockServer {
 		bindings:    map[string]map[string]map[string]any{},
 		kbAgents:    map[string]map[string]map[string]any{},
 		stores:      map[string]map[string]map[string]any{},
+		incidentPls: map[string]map[string]any{},
+		reviewWfs:   map[string]map[string]any{},
+		graderCfgs:  map[string]map[string]any{},
+		channels:    map[string]map[string]any{},
+		chanRoutes:  map[string]map[string]map[string]any{},
+		hostedAgs:   map[string]map[string]any{},
 	}
 	for _, res := range crudRegistry {
 		m.stores[res.collection] = map[string]map[string]any{}
@@ -166,6 +194,50 @@ func (m *mockServer) handle(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, []map[string]any{{"id": "wc_1", "name": "datadog-investigator", "description": "d", "category": "observability", "status": "available", "ready": true}})
 	case r.URL.Path == "/api/v1/skills" && r.Method == http.MethodGet:
 		writeJSON(w, http.StatusOK, []map[string]any{{"skill_id": "sk_1", "name": "search", "description": "d", "md5": "abc", "updated_at": mockTS, "tags": []any{"core"}}})
+	case r.URL.Path == "/api/v1/reviewers" && r.Method == http.MethodGet:
+		writeJSON(w, http.StatusOK, []map[string]any{{"agent_id": "agent_rev_1", "name": "security-reviewer", "description": "d", "is_builtin": true, "workflow_count": 0, "reviews_30d": 0, "findings_30d": 0}})
+
+	case r.URL.Path == "/api/v1/incident-pipelines" && r.Method == http.MethodPost:
+		m.createIncidentPipeline(w, r)
+	case incidentPipelineActionRe.MatchString(r.URL.Path) && r.Method == http.MethodPost:
+		mm := incidentPipelineActionRe.FindStringSubmatch(r.URL.Path)
+		m.incidentPipelineAction(w, mm[1], mm[2])
+	case incidentPipelineIDRe.MatchString(r.URL.Path):
+		m.incidentPipelineByID(w, r, incidentPipelineIDRe.FindStringSubmatch(r.URL.Path)[1])
+
+	case r.URL.Path == "/api/v1/review-workflows" && r.Method == http.MethodPost:
+		m.createReviewWorkflow(w, r)
+	case reviewWorkflowActionRe.MatchString(r.URL.Path) && r.Method == http.MethodPost:
+		mm := reviewWorkflowActionRe.FindStringSubmatch(r.URL.Path)
+		m.reviewWorkflowAction(w, mm[1], mm[2])
+	case reviewWorkflowIDRe.MatchString(r.URL.Path):
+		m.reviewWorkflowByID(w, r, reviewWorkflowIDRe.FindStringSubmatch(r.URL.Path)[1])
+
+	case r.URL.Path == "/api/v1/grader-configs" && r.Method == http.MethodPost:
+		m.createGraderConfig(w, r)
+	case r.URL.Path == "/api/v1/grader-configs" && r.Method == http.MethodGet:
+		m.listGraderConfigs(w, r)
+	case graderConfigIDRe.MatchString(r.URL.Path):
+		m.graderConfigByID(w, r, graderConfigIDRe.FindStringSubmatch(r.URL.Path)[1])
+
+	case r.URL.Path == "/api/v1/channels" && r.Method == http.MethodPost:
+		m.createChannel(w, r)
+	case channelActionRe.MatchString(r.URL.Path) && r.Method == http.MethodPost:
+		mm := channelActionRe.FindStringSubmatch(r.URL.Path)
+		m.channelAction(w, mm[1], mm[2])
+	case channelRoutesRe.MatchString(r.URL.Path):
+		m.channelRoutes(w, r, channelRoutesRe.FindStringSubmatch(r.URL.Path)[1])
+	case channelRouteIDRe.MatchString(r.URL.Path):
+		mm := channelRouteIDRe.FindStringSubmatch(r.URL.Path)
+		m.channelRouteByID(w, r, mm[1], mm[2])
+	case channelIDRe.MatchString(r.URL.Path):
+		m.channelByID(w, r, channelIDRe.FindStringSubmatch(r.URL.Path)[1])
+
+	case r.URL.Path == "/api/v1/hosted-agents" && r.Method == http.MethodPost:
+		m.createHostedAgent(w, r)
+	case hostedAgentByPathRe.MatchString(r.URL.Path):
+		mm := hostedAgentByPathRe.FindStringSubmatch(r.URL.Path)
+		m.hostedAgentByPath(w, r, mm[1], mm[2])
 
 	default:
 		if m.dispatchCRUD(w, r) {
@@ -541,6 +613,443 @@ func (m *mockServer) policyByID(w http.ResponseWriter, r *http.Request, id strin
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{})
 	}
+}
+
+// incidentPipelineDerive fills the computed/derived fields the detail response
+// always carries, from the stored request-shaped record.
+func incidentPipelineDerive(rec map[string]any) {
+	alert, _ := rec["alert_source"].(map[string]any)
+	if alert != nil {
+		rec["source_provider"] = alert["provider"]
+	}
+	binding, _ := rec["orchestrator_binding"].(map[string]any)
+	if binding == nil {
+		binding = map[string]any{"agent_id": "agent_orch_default"}
+		rec["orchestrator_binding"] = binding
+	}
+	rec["orchestrator_agent_id"] = binding["agent_id"]
+
+	rule, _ := rec["routing_rule"].(map[string]any)
+	if rule == nil {
+		rec["routing_rule"] = map[string]any{"route_all": true, "missing_field_default": false}
+	} else {
+		if rule["route_all"] == nil {
+			rule["route_all"] = false
+		}
+		if rule["missing_field_default"] == nil {
+			rule["missing_field_default"] = false
+		}
+	}
+
+	specialists, _ := rec["specialist_bindings"].([]any)
+	rec["specialist_count"] = len(specialists)
+
+	if dc, ok := rec["delivery_config"].(map[string]any); ok {
+		if slack, ok := dc["slack"].(map[string]any); ok {
+			if slack["channel_name"] == nil {
+				slack["channel_name"] = "chan-" + toString(slack["channel_id"])
+			}
+			if slack["enabled"] == nil {
+				slack["enabled"] = true
+			}
+		}
+	}
+}
+
+func (m *mockServer) createIncidentPipeline(w http.ResponseWriter, r *http.Request) {
+	body := decode(r)
+	id := m.nextID("ipl")
+	rec := cloneMap(body)
+	rec["id"] = id
+	rec["status"] = "draft"
+	rec["created_at"] = mockTS
+	rec["webhook_url"] = "https://mock.local/webhooks/" + id
+	rec["webhook_token"] = "wht_" + id
+	if rec["name"] == nil {
+		rec["name"] = "pipeline-" + id
+	}
+	incidentPipelineDerive(rec)
+	m.incidentPls[id] = rec
+	writeJSON(w, http.StatusCreated, rec)
+}
+
+func (m *mockServer) incidentPipelineByID(w http.ResponseWriter, r *http.Request, id string) {
+	rec, ok := m.incidentPls[id]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "incident pipeline not found"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, rec)
+	case http.MethodPatch:
+		for k, v := range decode(r) {
+			if v != nil {
+				rec[k] = v
+			}
+		}
+		incidentPipelineDerive(rec)
+		m.incidentPls[id] = rec
+		writeJSON(w, http.StatusOK, rec)
+	case http.MethodDelete:
+		delete(m.incidentPls, id)
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{})
+	}
+}
+
+func (m *mockServer) incidentPipelineAction(w http.ResponseWriter, id, action string) {
+	rec, ok := m.incidentPls[id]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "incident pipeline not found"})
+		return
+	}
+	if action == "activate" {
+		rec["status"] = "active"
+	} else {
+		rec["status"] = "paused"
+	}
+	m.incidentPls[id] = rec
+	writeJSON(w, http.StatusOK, rec)
+}
+
+// reviewWorkflowDerive fills the computed fields the detail response carries.
+func reviewWorkflowDerive(rec map[string]any) {
+	repos, _ := rec["repos"].([]any)
+	rec["repo_count"] = len(repos)
+	status := make([]any, 0, len(repos))
+	for i, ri := range repos {
+		repo, _ := ri.(map[string]any)
+		status = append(status, map[string]any{
+			"repo_owner":     repo["repo_owner"],
+			"repo_name":      repo["repo_name"],
+			"webhook_status": "active",
+			"github_hook_id": 1000 + i,
+		})
+	}
+	rec["repos"] = status
+	if rec["reviewer_agent_ids"] == nil {
+		rec["reviewer_agent_ids"] = []any{}
+	}
+}
+
+func (m *mockServer) createReviewWorkflow(w http.ResponseWriter, r *http.Request) {
+	body := decode(r)
+	id := m.nextID("rvw")
+	rec := cloneMap(body)
+	rec["id"] = id
+	rec["status"] = "draft"
+	rec["created_at"] = mockTS
+	rec["updated_at"] = mockTS
+	rec["webhook_url"] = "https://mock.local/review/" + id
+	if rec["name"] == nil {
+		rec["name"] = "review-" + id
+	}
+	reviewWorkflowDerive(rec)
+	m.reviewWfs[id] = rec
+	writeJSON(w, http.StatusCreated, rec)
+}
+
+func (m *mockServer) reviewWorkflowByID(w http.ResponseWriter, r *http.Request, id string) {
+	rec, ok := m.reviewWfs[id]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "review workflow not found"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, rec)
+	case http.MethodPatch:
+		for k, v := range decode(r) {
+			if v != nil {
+				rec[k] = v
+			}
+		}
+		reviewWorkflowDerive(rec)
+		rec["updated_at"] = mockTS
+		m.reviewWfs[id] = rec
+		writeJSON(w, http.StatusOK, rec)
+	case http.MethodDelete:
+		delete(m.reviewWfs, id)
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{})
+	}
+}
+
+func (m *mockServer) reviewWorkflowAction(w http.ResponseWriter, id, action string) {
+	rec, ok := m.reviewWfs[id]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "review workflow not found"})
+		return
+	}
+	if action == "activate" {
+		rec["status"] = "active"
+	} else {
+		rec["status"] = "paused"
+	}
+	m.reviewWfs[id] = rec
+	writeJSON(w, http.StatusOK, rec)
+}
+
+func (m *mockServer) createGraderConfig(w http.ResponseWriter, r *http.Request) {
+	body := decode(r)
+	id := m.nextID("grd")
+	rec := cloneMap(body)
+	rec["id"] = id
+	rec["runs_seen"] = 0
+	rec["created_at"] = mockTS
+	rec["updated_at"] = mockTS
+	if rec["sample_rate"] == nil {
+		rec["sample_rate"] = 100
+	}
+	if rec["guidelines"] == nil {
+		rec["guidelines"] = ""
+	}
+	m.graderCfgs[id] = rec
+	writeJSON(w, http.StatusCreated, rec)
+}
+
+func (m *mockServer) listGraderConfigs(w http.ResponseWriter, r *http.Request) {
+	target := r.URL.Query().Get("target_agent_id")
+	out := make([]map[string]any, 0)
+	for _, v := range m.graderCfgs {
+		if target != "" && toString(v["target_agent_id"]) != target {
+			continue
+		}
+		out = append(out, v)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"configs": out})
+}
+
+func (m *mockServer) graderConfigByID(w http.ResponseWriter, r *http.Request, id string) {
+	rec, ok := m.graderCfgs[id]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "grader config not found"})
+		return
+	}
+	switch r.Method {
+	case http.MethodPatch:
+		for k, v := range decode(r) {
+			if v != nil {
+				rec[k] = v
+			}
+		}
+		rec["updated_at"] = mockTS
+		m.graderCfgs[id] = rec
+		writeJSON(w, http.StatusOK, rec)
+	case http.MethodDelete:
+		delete(m.graderCfgs, id)
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{})
+	}
+}
+
+func (m *mockServer) createChannel(w http.ResponseWriter, r *http.Request) {
+	body := decode(r)
+	id := m.nextID("chn")
+	rec := map[string]any{
+		"id":           id,
+		"account_id":   "acct_mock",
+		"provider":     body["provider"],
+		"connector":    body["connector"],
+		"display_name": body["display_name"],
+		"slug":         "slug-" + id,
+		"status":       "active",
+		"created_at":   mockTS,
+		"updated_at":   mockTS,
+	}
+	if v := body["config"]; v != nil {
+		rec["config_json"] = v
+	}
+	for _, k := range []string{"labels", "external_id", "integration_id"} {
+		if v := body[k]; v != nil {
+			rec[k] = v
+		}
+	}
+	m.channels[id] = rec
+	writeJSON(w, http.StatusCreated, rec)
+}
+
+func (m *mockServer) channelByID(w http.ResponseWriter, r *http.Request, id string) {
+	rec, ok := m.channels[id]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "channel not found"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, rec)
+	case http.MethodPatch:
+		for k, v := range decode(r) {
+			if v == nil || k == "app_token" {
+				continue
+			}
+			if k == "config" {
+				rec["config_json"] = v
+				continue
+			}
+			rec[k] = v
+		}
+		rec["updated_at"] = mockTS
+		m.channels[id] = rec
+		writeJSON(w, http.StatusOK, rec)
+	case http.MethodDelete:
+		delete(m.channels, id)
+		delete(m.chanRoutes, id)
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{})
+	}
+}
+
+func (m *mockServer) channelAction(w http.ResponseWriter, id, action string) {
+	rec, ok := m.channels[id]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "channel not found"})
+		return
+	}
+	if action == "pause" {
+		rec["status"] = "paused"
+	} else {
+		rec["status"] = "active"
+	}
+	m.channels[id] = rec
+	writeJSON(w, http.StatusOK, rec)
+}
+
+func (m *mockServer) channelRoutes(w http.ResponseWriter, r *http.Request, channelID string) {
+	switch r.Method {
+	case http.MethodPost:
+		body := decode(r)
+		rid := m.nextID("rt")
+		rec := map[string]any{
+			"id":          rid,
+			"account_id":  "acct_mock",
+			"channel_id":  channelID,
+			"rule_type":   body["rule_type"],
+			"target_type": body["target_type"],
+			"target_id":   body["target_id"],
+			"priority":    body["priority"],
+			"is_default":  valueOr(body["is_default"], false),
+			"is_enabled":  valueOr(body["is_enabled"], true),
+			"created_at":  mockTS,
+			"updated_at":  mockTS,
+		}
+		if v := body["match"]; v != nil {
+			rec["match_json"] = v
+		}
+		if v := body["input"]; v != nil {
+			rec["input_json"] = v
+		}
+		if m.chanRoutes[channelID] == nil {
+			m.chanRoutes[channelID] = map[string]map[string]any{}
+		}
+		m.chanRoutes[channelID][rid] = rec
+		writeJSON(w, http.StatusCreated, rec)
+	case http.MethodGet:
+		out := make([]map[string]any, 0)
+		for _, v := range m.chanRoutes[channelID] {
+			out = append(out, v)
+		}
+		writeJSON(w, http.StatusOK, out)
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{})
+	}
+}
+
+func (m *mockServer) channelRouteByID(w http.ResponseWriter, r *http.Request, channelID, routeID string) {
+	routes := m.chanRoutes[channelID]
+	rec, ok := routes[routeID]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "route not found"})
+		return
+	}
+	switch r.Method {
+	case http.MethodPatch:
+		for k, v := range decode(r) {
+			if v == nil {
+				continue
+			}
+			switch k {
+			case "match":
+				rec["match_json"] = v
+			case "input":
+				rec["input_json"] = v
+			default:
+				rec[k] = v
+			}
+		}
+		rec["updated_at"] = mockTS
+		routes[routeID] = rec
+		writeJSON(w, http.StatusOK, rec)
+	case http.MethodDelete:
+		delete(routes, routeID)
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{})
+	}
+}
+
+func (m *mockServer) createHostedAgent(w http.ResponseWriter, r *http.Request) {
+	body := decode(r)
+	customer := toString(body["customer"])
+	agentID := toString(body["agentId"])
+	id := m.nextID("ha")
+	rec := map[string]any{
+		"id":             id,
+		"customer":       customer,
+		"agentId":        agentID,
+		"identity":       "identity-" + id,
+		"runtimeAgentId": "rt-" + id,
+		"repoOwner":      "komodorio",
+		"repoName":       "agent-" + agentID,
+		"repoBranch":     "main",
+		"repoPath":       "/",
+		"status":         "deploying",
+		"createdAt":      mockTS,
+		"updatedAt":      mockTS,
+	}
+	m.hostedAgs[customer+"/"+agentID] = rec
+	writeJSON(w, http.StatusCreated, rec)
+}
+
+func (m *mockServer) hostedAgentByPath(w http.ResponseWriter, r *http.Request, customer, agentID string) {
+	key := customer + "/" + agentID
+	rec, ok := m.hostedAgs[key]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "hosted agent not found"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, rec)
+	case http.MethodPut:
+		_ = decode(r) // spec fields are not echoed back
+		rec["updatedAt"] = mockTS
+		rec["status"] = "online"
+		m.hostedAgs[key] = rec
+		writeJSON(w, http.StatusOK, rec)
+	case http.MethodDelete:
+		delete(m.hostedAgs, key)
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{})
+	}
+}
+
+func valueOr(v, def any) any {
+	if v == nil {
+		return def
+	}
+	return v
+}
+
+func toString(v any) string {
+	s, _ := v.(string)
+	return s
 }
 
 func decode(r *http.Request) map[string]any {

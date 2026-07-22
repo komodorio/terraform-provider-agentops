@@ -911,6 +911,28 @@
             "title": "AgentInstanceDefaultInput",
             "type": "object"
           },
+          "deploy_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deploy Error"
+          },
+          "deploy_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deploy Status"
+          },
           "description": {
             "default": "",
             "title": "Description",
@@ -1069,6 +1091,17 @@
             "title": "Name",
             "type": "string"
           },
+          "oldest_queued_run_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oldest Queued Run At"
+          },
           "owner": {
             "default": "",
             "title": "Owner",
@@ -1120,7 +1153,9 @@
             "enum": [
               "online",
               "offline",
-              "draft"
+              "draft",
+              "deploying",
+              "deploy_failed"
             ],
             "title": "Status",
             "type": "string"
@@ -1166,11 +1201,6 @@
           "agent_id": {
             "title": "Agent Id",
             "type": "string"
-          },
-          "auto_enable": {
-            "default": false,
-            "title": "Auto Enable",
-            "type": "boolean"
           },
           "capabilities": {
             "additionalProperties": true,
@@ -1416,6 +1446,14 @@
         ],
         "title": "AgentQualityRollup",
         "type": "object"
+      },
+      "AlertProvider": {
+        "enum": [
+          "datadog",
+          "generic"
+        ],
+        "title": "AlertProvider",
+        "type": "string"
       },
       "ApiKeyBoundTo": {
         "description": "What kind of principal an API key acts as. Derived from the bound principal's kind, not a\nstored column \u2014 a key on a ``human`` principal is user-bound, otherwise service-account.",
@@ -1805,6 +1843,27 @@
         "title": "AuditEntryView",
         "type": "object"
       },
+      "AuditSortKey": {
+        "description": "Allow-listed columns the Audit page may sort by. Only these map to a real (indexed-friendly)\nordering expression \u2014 an arbitrary client string can never reach the ``ORDER BY``, so this is\nalso the injection guard for server-side sort.",
+        "enum": [
+          "when",
+          "action",
+          "actor",
+          "type",
+          "status"
+        ],
+        "title": "AuditSortKey",
+        "type": "string"
+      },
+      "AuditStatus": {
+        "description": "The action outcome. DB CHECK-enforced.",
+        "enum": [
+          "success",
+          "failure"
+        ],
+        "title": "AuditStatus",
+        "type": "string"
+      },
       "AuthMeResponse": {
         "description": "Top-level response for GET /auth/me.",
         "properties": {
@@ -2035,6 +2094,17 @@
           "resource_id": {
             "title": "Resource Id",
             "type": "string"
+          },
+          "resource_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Label"
           },
           "resource_type": {
             "title": "Resource Type",
@@ -2584,7 +2654,7 @@
         "title": "BindCredentialRequest",
         "type": "object"
       },
-      "Body_knowledge_upload_document": {
+      "Body_knowledge_upload_documents": {
         "properties": {
           "doc_type": {
             "anyOf": [
@@ -2608,10 +2678,13 @@
             ],
             "title": "Environment"
           },
-          "file": {
-            "contentMediaType": "application/octet-stream",
-            "title": "File",
-            "type": "string"
+          "files": {
+            "items": {
+              "contentMediaType": "application/octet-stream",
+              "type": "string"
+            },
+            "title": "Files",
+            "type": "array"
           },
           "owner": {
             "anyOf": [
@@ -2670,9 +2743,26 @@
           }
         },
         "required": [
-          "file"
+          "files"
         ],
-        "title": "Body_knowledge_upload_document",
+        "title": "Body_knowledge_upload_documents",
+        "type": "object"
+      },
+      "CancelRunRequest": {
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "CancelRunRequest",
         "type": "object"
       },
       "CatalogTool": {
@@ -2853,6 +2943,10 @@
             "title": "Provider",
             "type": "string"
           },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -2868,6 +2962,7 @@
           "provider",
           "connector",
           "display_name",
+          "slug",
           "status",
           "created_at",
           "updated_at"
@@ -3823,6 +3918,59 @@
         "title": "CreateGraderConfigRequest",
         "type": "object"
       },
+      "CreateIncidentPipelineRequest": {
+        "properties": {
+          "alert_source": {
+            "$ref": "#/components/schemas/IncidentPipelineAlertSource"
+          },
+          "delivery_config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeliveryConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "orchestrator_binding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IncidentPipelineOrchestratorBinding"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "routing_rule": {
+            "$ref": "#/components/schemas/IncidentPipelineRoutingRule"
+          },
+          "specialist_bindings": {
+            "items": {
+              "$ref": "#/components/schemas/IncidentPipelineSpecialistBinding"
+            },
+            "title": "Specialist Bindings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "alert_source"
+        ],
+        "title": "CreateIncidentPipelineRequest",
+        "type": "object"
+      },
       "CreateIntegrationConnectionRequest": {
         "properties": {
           "credentials": {
@@ -3912,6 +4060,48 @@
           "name"
         ],
         "title": "CreateKnowledgeBaseRequest",
+        "type": "object"
+      },
+      "CreateReviewWorkflowRequest": {
+        "properties": {
+          "base_branch_filter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Branch Filter"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "repos": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewWorkflowRepoInput"
+            },
+            "title": "Repos",
+            "type": "array"
+          },
+          "reviewer_agent_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reviewer Agent Ids",
+            "type": "array"
+          }
+        },
+        "title": "CreateReviewWorkflowRequest",
         "type": "object"
       },
       "CreateRouteRequest": {
@@ -4265,6 +4455,11 @@
       },
       "CreateWebhookTriggerRequest": {
         "properties": {
+          "capture_samples": {
+            "default": true,
+            "title": "Capture Samples",
+            "type": "boolean"
+          },
           "description": {
             "anyOf": [
               {
@@ -4320,26 +4515,37 @@
             "title": "Signing Secret"
           },
           "target_id": {
-            "title": "Target Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Id"
           },
           "target_type": {
-            "$ref": "#/components/schemas/TriggerTargetType"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TriggerTargetType"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "webhook_type": {
             "default": "token",
             "enum": [
               "token",
-              "github"
+              "github",
+              "bearer"
             ],
             "title": "Webhook Type",
             "type": "string"
           }
         },
-        "required": [
-          "target_type",
-          "target_id"
-        ],
         "title": "CreateWebhookTriggerRequest",
         "type": "object"
       },
@@ -4830,6 +5036,80 @@
         "title": "DeletedResponse",
         "type": "object"
       },
+      "DeliveryConfig": {
+        "properties": {
+          "slack": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SlackDeliveryConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "DeliveryConfig",
+        "type": "object"
+      },
+      "EndpointWebhookAcceptedResponse": {
+        "description": "Response for the standalone endpoint ingest route (``/webhooks/endpoint/{trigger_id}``).\n\nA standalone endpoint accepts and captures the payload regardless of whether a target is\nattached. ``routed`` is true when it dispatched to an agent/workflow; when no target is wired\nyet it is false (the payload is captured for inspection but nothing runs).",
+        "properties": {
+          "accepted": {
+            "default": true,
+            "title": "Accepted",
+            "type": "boolean"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "routed": {
+            "default": false,
+            "title": "Routed",
+            "type": "boolean"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "status_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Url"
+          },
+          "trigger_id": {
+            "title": "Trigger Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trigger_id"
+        ],
+        "title": "EndpointWebhookAcceptedResponse",
+        "type": "object"
+      },
       "EnqueueRequest": {
         "properties": {
           "delay": {
@@ -5015,6 +5295,34 @@
           "name"
         ],
         "title": "GatewayModel",
+        "type": "object"
+      },
+      "GithubRepoOption": {
+        "properties": {
+          "default_branch": {
+            "title": "Default Branch",
+            "type": "string"
+          },
+          "full_name": {
+            "title": "Full Name",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner": {
+            "title": "Owner",
+            "type": "string"
+          }
+        },
+        "required": [
+          "owner",
+          "name",
+          "full_name",
+          "default_branch"
+        ],
+        "title": "GithubRepoOption",
         "type": "object"
       },
       "GradeContext": {
@@ -5584,7 +5892,9 @@
             "enum": [
               "online",
               "offline",
-              "draft"
+              "draft",
+              "deploying",
+              "deploy_failed"
             ],
             "title": "Status",
             "type": "string"
@@ -5815,7 +6125,9 @@
                 "enum": [
                   "online",
                   "offline",
-                  "draft"
+                  "draft",
+                  "deploying",
+                  "deploy_failed"
                 ],
                 "type": "string"
               },
@@ -6281,6 +6593,426 @@
         "title": "ImpersonationSessionView",
         "type": "object"
       },
+      "IncidentDetailResponse": {
+        "description": "``GET /incidents/{id}`` response \u2014 the incident detail plus its aggregate investigation stats\n(duration/tokens/cost/errors), flattened onto the same object the UI's ``PlatformIncidentDetail``\nalready expects (additive field, so it's wire-compatible before the UI's stats card ships).",
+        "properties": {
+          "alert_payload": {
+            "additionalProperties": true,
+            "title": "Alert Payload",
+            "type": "object"
+          },
+          "alert_summary": {
+            "title": "Alert Summary",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "findings_snippet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Findings Snippet"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "orchestrator_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orchestrator Run Id"
+          },
+          "pipeline_id": {
+            "title": "Pipeline Id",
+            "type": "string"
+          },
+          "pipeline_name": {
+            "title": "Pipeline Name",
+            "type": "string"
+          },
+          "refire_count": {
+            "default": 0,
+            "title": "Refire Count",
+            "type": "integer"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "source_provider": {
+            "$ref": "#/components/schemas/AlertProvider"
+          },
+          "specialist_run_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Specialist Run Ids",
+            "type": "array"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/InvestigationStats"
+          },
+          "status": {
+            "$ref": "#/components/schemas/IncidentStatus"
+          },
+          "timeline": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineEntry"
+            },
+            "title": "Timeline",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "triggered_at": {
+            "title": "Triggered At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "severity",
+          "status",
+          "source_provider",
+          "pipeline_id",
+          "pipeline_name",
+          "triggered_at",
+          "alert_summary",
+          "stats"
+        ],
+        "title": "IncidentDetailResponse",
+        "type": "object"
+      },
+      "IncidentPipelineAlertSource": {
+        "properties": {
+          "external_monitor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Monitor Id"
+          },
+          "monitor_mode": {
+            "$ref": "#/components/schemas/MonitorMode"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/AlertProvider"
+          }
+        },
+        "required": [
+          "provider",
+          "monitor_mode"
+        ],
+        "title": "IncidentPipelineAlertSource",
+        "type": "object"
+      },
+      "IncidentPipelineDetail": {
+        "properties": {
+          "alert_source": {
+            "$ref": "#/components/schemas/IncidentPipelineAlertSource"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "delivery_config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeliveryConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_incident_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Incident At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "orchestrator_agent_id": {
+            "title": "Orchestrator Agent Id",
+            "type": "string"
+          },
+          "orchestrator_binding": {
+            "$ref": "#/components/schemas/IncidentPipelineOrchestratorBinding"
+          },
+          "routing_rule": {
+            "$ref": "#/components/schemas/IncidentPipelineRoutingRule"
+          },
+          "source_provider": {
+            "$ref": "#/components/schemas/AlertProvider"
+          },
+          "specialist_bindings": {
+            "items": {
+              "$ref": "#/components/schemas/IncidentPipelineSpecialistBinding"
+            },
+            "title": "Specialist Bindings",
+            "type": "array"
+          },
+          "specialist_count": {
+            "title": "Specialist Count",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PipelineStatus"
+          },
+          "trigger_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Id"
+          },
+          "webhook_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Webhook Token"
+          },
+          "webhook_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Webhook Url"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "source_provider",
+          "orchestrator_agent_id",
+          "specialist_count",
+          "created_at",
+          "alert_source",
+          "routing_rule",
+          "orchestrator_binding"
+        ],
+        "title": "IncidentPipelineDetail",
+        "type": "object"
+      },
+      "IncidentPipelineOrchestratorBinding": {
+        "properties": {
+          "agent_id": {
+            "title": "Agent Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id"
+        ],
+        "title": "IncidentPipelineOrchestratorBinding",
+        "type": "object"
+      },
+      "IncidentPipelineRoutingRule": {
+        "properties": {
+          "environment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environment"
+          },
+          "missing_field_default": {
+            "default": false,
+            "title": "Missing Field Default",
+            "type": "boolean"
+          },
+          "route_all": {
+            "default": true,
+            "title": "Route All",
+            "type": "boolean"
+          },
+          "service": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity"
+          },
+          "tags": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "object"
+          }
+        },
+        "title": "IncidentPipelineRoutingRule",
+        "type": "object"
+      },
+      "IncidentPipelineSpecialistBinding": {
+        "properties": {
+          "agent_id": {
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id",
+          "role",
+          "enabled"
+        ],
+        "title": "IncidentPipelineSpecialistBinding",
+        "type": "object"
+      },
+      "IncidentPipelineSummary": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_incident_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Incident At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "orchestrator_agent_id": {
+            "title": "Orchestrator Agent Id",
+            "type": "string"
+          },
+          "source_provider": {
+            "$ref": "#/components/schemas/AlertProvider"
+          },
+          "specialist_count": {
+            "title": "Specialist Count",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PipelineStatus"
+          },
+          "trigger_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Id"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "source_provider",
+          "orchestrator_agent_id",
+          "specialist_count",
+          "created_at"
+        ],
+        "title": "IncidentPipelineSummary",
+        "type": "object"
+      },
+      "IncidentStatus": {
+        "enum": [
+          "open",
+          "triaging",
+          "triaged",
+          "errored",
+          "resolved"
+        ],
+        "title": "IncidentStatus",
+        "type": "string"
+      },
       "IngestRunEventsRequest": {
         "properties": {
           "events": {
@@ -6735,6 +7467,55 @@
           "authorization_url"
         ],
         "title": "IntegrationOAuthMetadata",
+        "type": "object"
+      },
+      "InvestigationStats": {
+        "properties": {
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          },
+          "error_count": {
+            "default": 0,
+            "title": "Error Count",
+            "type": "integer"
+          },
+          "run_count": {
+            "default": 0,
+            "title": "Run Count",
+            "type": "integer"
+          },
+          "total_cost": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Cost"
+          },
+          "total_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Tokens"
+          }
+        },
+        "title": "InvestigationStats",
         "type": "object"
       },
       "InviteMemberRequest": {
@@ -7388,11 +8169,21 @@
           "metadata": {
             "$ref": "#/components/schemas/KBDocumentMetadata"
           },
+          "mime_type": {
+            "default": "text/plain",
+            "title": "Mime Type",
+            "type": "string"
+          },
           "origin": {
             "$ref": "#/components/schemas/KBDocumentOrigin"
           },
           "path": {
             "title": "Path",
+            "type": "string"
+          },
+          "raw_content": {
+            "default": "",
+            "title": "Raw Content",
             "type": "string"
           },
           "runs": {
@@ -7484,6 +8275,17 @@
             ],
             "title": "Service"
           },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
           "tags": {
             "items": {
               "type": "string"
@@ -7498,6 +8300,7 @@
       "KBDocumentOrigin": {
         "enum": [
           "uploaded",
+          "authored",
           "agent"
         ],
         "title": "KBDocumentOrigin",
@@ -8030,6 +8833,48 @@
         "title": "LogEventResponse",
         "type": "object"
       },
+      "ManualSetupInstructions": {
+        "description": "Copy-paste fallback for a repo whose hook could not be auto-created (missing App\npermission, PAT integration, or no GitHub integration connected at all).",
+        "properties": {
+          "content_type": {
+            "const": "json",
+            "default": "json",
+            "title": "Content Type",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "repo_name": {
+            "title": "Repo Name",
+            "type": "string"
+          },
+          "repo_owner": {
+            "title": "Repo Owner",
+            "type": "string"
+          },
+          "secret": {
+            "title": "Secret",
+            "type": "string"
+          },
+          "webhook_url": {
+            "title": "Webhook Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repo_owner",
+          "repo_name",
+          "webhook_url",
+          "secret"
+        ],
+        "title": "ManualSetupInstructions",
+        "type": "object"
+      },
       "McpPolicyCreate": {
         "properties": {
           "document": {
@@ -8389,6 +9234,14 @@
         "title": "ModelUsage",
         "type": "object"
       },
+      "MonitorMode": {
+        "enum": [
+          "create_catchall",
+          "link_existing"
+        ],
+        "title": "MonitorMode",
+        "type": "string"
+      },
       "OAuthCallbackRequest": {
         "properties": {
           "code": {
@@ -8503,6 +9356,15 @@
         "title": "OnDemandGradeResponse",
         "type": "object"
       },
+      "PipelineStatus": {
+        "enum": [
+          "draft",
+          "active",
+          "paused"
+        ],
+        "title": "PipelineStatus",
+        "type": "string"
+      },
       "PlatformAuditEntryView": {
         "properties": {
           "account_id": {
@@ -8586,6 +9448,171 @@
           "detail"
         ],
         "title": "PlatformAuditEntryView",
+        "type": "object"
+      },
+      "PlatformIncidentDetail": {
+        "properties": {
+          "alert_payload": {
+            "additionalProperties": true,
+            "title": "Alert Payload",
+            "type": "object"
+          },
+          "alert_summary": {
+            "title": "Alert Summary",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "findings_snippet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Findings Snippet"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "orchestrator_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orchestrator Run Id"
+          },
+          "pipeline_id": {
+            "title": "Pipeline Id",
+            "type": "string"
+          },
+          "pipeline_name": {
+            "title": "Pipeline Name",
+            "type": "string"
+          },
+          "refire_count": {
+            "default": 0,
+            "title": "Refire Count",
+            "type": "integer"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "source_provider": {
+            "$ref": "#/components/schemas/AlertProvider"
+          },
+          "specialist_run_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Specialist Run Ids",
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/IncidentStatus"
+          },
+          "timeline": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineEntry"
+            },
+            "title": "Timeline",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "triggered_at": {
+            "title": "Triggered At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "severity",
+          "status",
+          "source_provider",
+          "pipeline_id",
+          "pipeline_name",
+          "triggered_at",
+          "alert_summary"
+        ],
+        "title": "PlatformIncidentDetail",
+        "type": "object"
+      },
+      "PlatformIncidentSummary": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "orchestrator_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orchestrator Run Id"
+          },
+          "pipeline_id": {
+            "title": "Pipeline Id",
+            "type": "string"
+          },
+          "pipeline_name": {
+            "title": "Pipeline Name",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "source_provider": {
+            "$ref": "#/components/schemas/AlertProvider"
+          },
+          "status": {
+            "$ref": "#/components/schemas/IncidentStatus"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "triggered_at": {
+            "title": "Triggered At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "severity",
+          "status",
+          "source_provider",
+          "pipeline_id",
+          "pipeline_name",
+          "triggered_at"
+        ],
+        "title": "PlatformIncidentSummary",
         "type": "object"
       },
       "PlatformOverviewView": {
@@ -9155,6 +10182,662 @@
         "title": "RequeuedResponse",
         "type": "object"
       },
+      "RereviewResponse": {
+        "properties": {
+          "dispatched_agent_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dispatched Agent Ids",
+            "type": "array"
+          },
+          "review_id": {
+            "title": "Review Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "review_id",
+          "dispatched_agent_ids"
+        ],
+        "title": "RereviewResponse",
+        "type": "object"
+      },
+      "RetryIncidentResponse": {
+        "properties": {
+          "incident": {
+            "$ref": "#/components/schemas/PlatformIncidentDetail"
+          },
+          "new_run_id": {
+            "title": "New Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "incident",
+          "new_run_id"
+        ],
+        "title": "RetryIncidentResponse",
+        "type": "object"
+      },
+      "ReviewDetail": {
+        "properties": {
+          "additions": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Additions"
+          },
+          "base_branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Branch"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
+          "deletions": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deletions"
+          },
+          "event": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event"
+          },
+          "files_changed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Files Changed"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "opened_at": {
+            "title": "Opened At",
+            "type": "string"
+          },
+          "pr_author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pr Author"
+          },
+          "pr_number": {
+            "title": "Pr Number",
+            "type": "integer"
+          },
+          "pr_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pr Title"
+          },
+          "pr_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pr Url"
+          },
+          "repo_name": {
+            "title": "Repo Name",
+            "type": "string"
+          },
+          "repo_owner": {
+            "title": "Repo Owner",
+            "type": "string"
+          },
+          "reviewer_results": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewerRunResult"
+            },
+            "title": "Reviewer Results",
+            "type": "array"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReviewStatus"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workflow_id": {
+            "title": "Workflow Id",
+            "type": "string"
+          },
+          "workflow_name": {
+            "title": "Workflow Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workflow_id",
+          "workflow_name",
+          "repo_owner",
+          "repo_name",
+          "pr_number",
+          "status",
+          "opened_at",
+          "updated_at"
+        ],
+        "title": "ReviewDetail",
+        "type": "object"
+      },
+      "ReviewStatus": {
+        "enum": [
+          "pending",
+          "reviewing",
+          "completed",
+          "failed",
+          "closed"
+        ],
+        "title": "ReviewStatus",
+        "type": "string"
+      },
+      "ReviewSummary": {
+        "properties": {
+          "event": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "opened_at": {
+            "title": "Opened At",
+            "type": "string"
+          },
+          "pr_number": {
+            "title": "Pr Number",
+            "type": "integer"
+          },
+          "pr_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pr Title"
+          },
+          "pr_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pr Url"
+          },
+          "repo_name": {
+            "title": "Repo Name",
+            "type": "string"
+          },
+          "repo_owner": {
+            "title": "Repo Owner",
+            "type": "string"
+          },
+          "reviewer_results": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewerRunResult"
+            },
+            "title": "Reviewer Results",
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReviewStatus"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workflow_id": {
+            "title": "Workflow Id",
+            "type": "string"
+          },
+          "workflow_name": {
+            "title": "Workflow Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workflow_id",
+          "workflow_name",
+          "repo_owner",
+          "repo_name",
+          "pr_number",
+          "status",
+          "opened_at",
+          "updated_at"
+        ],
+        "title": "ReviewSummary",
+        "type": "object"
+      },
+      "ReviewWebhookStatus": {
+        "enum": [
+          "pending",
+          "healthy",
+          "error"
+        ],
+        "title": "ReviewWebhookStatus",
+        "type": "string"
+      },
+      "ReviewWorkflowDetail": {
+        "properties": {
+          "base_branch_filter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Branch Filter"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "manual_setup": {
+            "items": {
+              "$ref": "#/components/schemas/ManualSetupInstructions"
+            },
+            "title": "Manual Setup",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "repo_count": {
+            "title": "Repo Count",
+            "type": "integer"
+          },
+          "repos": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewWorkflowRepoStatus"
+            },
+            "title": "Repos",
+            "type": "array"
+          },
+          "reviewer_agent_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reviewer Agent Ids",
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReviewWorkflowStatus"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "webhook_url": {
+            "default": "",
+            "title": "Webhook Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "repo_count",
+          "reviewer_agent_ids",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ReviewWorkflowDetail",
+        "type": "object"
+      },
+      "ReviewWorkflowRepoInput": {
+        "properties": {
+          "repo_name": {
+            "title": "Repo Name",
+            "type": "string"
+          },
+          "repo_owner": {
+            "title": "Repo Owner",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repo_owner",
+          "repo_name"
+        ],
+        "title": "ReviewWorkflowRepoInput",
+        "type": "object"
+      },
+      "ReviewWorkflowRepoStatus": {
+        "properties": {
+          "github_hook_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Github Hook Id"
+          },
+          "repo_name": {
+            "title": "Repo Name",
+            "type": "string"
+          },
+          "repo_owner": {
+            "title": "Repo Owner",
+            "type": "string"
+          },
+          "webhook_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Webhook Error"
+          },
+          "webhook_status": {
+            "$ref": "#/components/schemas/ReviewWebhookStatus"
+          }
+        },
+        "required": [
+          "repo_owner",
+          "repo_name",
+          "webhook_status"
+        ],
+        "title": "ReviewWorkflowRepoStatus",
+        "type": "object"
+      },
+      "ReviewWorkflowStatus": {
+        "enum": [
+          "draft",
+          "active",
+          "paused"
+        ],
+        "title": "ReviewWorkflowStatus",
+        "type": "string"
+      },
+      "ReviewWorkflowSummary": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "repo_count": {
+            "title": "Repo Count",
+            "type": "integer"
+          },
+          "reviewer_agent_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reviewer Agent Ids",
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReviewWorkflowStatus"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "repo_count",
+          "reviewer_agent_ids",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ReviewWorkflowSummary",
+        "type": "object"
+      },
+      "ReviewerRunResult": {
+        "properties": {
+          "agent_id": {
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "comment_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment Url"
+          },
+          "parse_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parse Error"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "run_status": {
+            "title": "Run Status",
+            "type": "string"
+          },
+          "severity_counts": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity Counts"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "verdict": {
+            "anyOf": [
+              {
+                "enum": [
+                  "approve",
+                  "request_changes",
+                  "comment"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verdict"
+          }
+        },
+        "required": [
+          "agent_id",
+          "run_id",
+          "run_status"
+        ],
+        "title": "ReviewerRunResult",
+        "type": "object"
+      },
+      "ReviewerSummary": {
+        "properties": {
+          "agent_id": {
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "findings_30d": {
+            "title": "Findings 30D",
+            "type": "integer"
+          },
+          "is_builtin": {
+            "title": "Is Builtin",
+            "type": "boolean"
+          },
+          "last_review_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Review At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "reviews_30d": {
+            "title": "Reviews 30D",
+            "type": "integer"
+          },
+          "workflow_count": {
+            "title": "Workflow Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "agent_id",
+          "name",
+          "is_builtin",
+          "workflow_count",
+          "reviews_30d",
+          "findings_30d"
+        ],
+        "title": "ReviewerSummary",
+        "type": "object"
+      },
       "ReviveRunRequest": {
         "properties": {
           "input": {
@@ -9648,6 +11331,16 @@
               }
             ],
             "title": "Trace Id"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunUsage"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -9952,7 +11645,8 @@
           "claimed",
           "running",
           "succeeded",
-          "failed"
+          "failed",
+          "cancelled"
         ],
         "title": "RunStatus",
         "type": "string"
@@ -10112,6 +11806,7 @@
         "type": "object"
       },
       "RunUsage": {
+        "description": "Token and cost accounting for a run, or for a single ``token.created`` event.",
         "properties": {
           "cost_amount": {
             "anyOf": [
@@ -10905,6 +12600,142 @@
         "title": "SkillSummary",
         "type": "object"
       },
+      "SlackBotAccess": {
+        "properties": {
+          "channel_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Name"
+          },
+          "invite_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invite Hint"
+          },
+          "is_member": {
+            "title": "Is Member",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "is_member"
+        ],
+        "title": "SlackBotAccess",
+        "type": "object"
+      },
+      "SlackChannel": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_private": {
+            "title": "Is Private",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "is_private"
+        ],
+        "title": "SlackChannel",
+        "type": "object"
+      },
+      "SlackChannelResolved": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "SlackChannelResolved",
+        "type": "object"
+      },
+      "SlackChannelsResponse": {
+        "properties": {
+          "bot_token_only": {
+            "default": false,
+            "title": "Bot Token Only",
+            "type": "boolean"
+          },
+          "channels": {
+            "items": {
+              "$ref": "#/components/schemas/SlackChannel"
+            },
+            "title": "Channels",
+            "type": "array"
+          },
+          "load_failed": {
+            "default": false,
+            "title": "Load Failed",
+            "type": "boolean"
+          },
+          "workspace_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Name"
+          }
+        },
+        "required": [
+          "channels"
+        ],
+        "title": "SlackChannelsResponse",
+        "type": "object"
+      },
+      "SlackDeliveryConfig": {
+        "properties": {
+          "channel_id": {
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "channel_name": {
+            "default": "",
+            "title": "Channel Name",
+            "type": "string"
+          },
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "channel_id"
+        ],
+        "title": "SlackDeliveryConfig",
+        "type": "object"
+      },
       "SlackKeywordTriggerManifest": {
         "properties": {
           "channels": {
@@ -10971,6 +12802,14 @@
         ],
         "title": "SlackKeywordTriggerManifest",
         "type": "object"
+      },
+      "SortOrder": {
+        "enum": [
+          "asc",
+          "desc"
+        ],
+        "title": "SortOrder",
+        "type": "string"
       },
       "StartIntegrationAppRequest": {
         "properties": {
@@ -11275,6 +13114,29 @@
         "title": "TestIntegrationConnectionResponse",
         "type": "object"
       },
+      "TimelineEntry": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "time": {
+            "title": "Time",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "time",
+          "title",
+          "body"
+        ],
+        "title": "TimelineEntry",
+        "type": "object"
+      },
       "TopAccountView": {
         "properties": {
           "account_id": {
@@ -11531,7 +13393,8 @@
       "TriggerTargetType": {
         "enum": [
           "agent",
-          "workflow"
+          "workflow",
+          "incident_pipeline"
         ],
         "title": "TriggerTargetType",
         "type": "string"
@@ -11546,6 +13409,52 @@
           }
         },
         "title": "TriggerWorkflowRequest",
+        "type": "object"
+      },
+      "TrustedDomainSettingsView": {
+        "description": "The Account-settings view of trusted domains for the current account and caller.\n\n``domains`` lists every trusted domain on the account (including any an operator registered), so\nthe owner can see the full picture. ``eligible_domain`` is the caller's own self-serviceable\ndomain \u2014 non-null only when their sign-in email is an eligible (non-consumer) domain; the UI\nrenders the auto-join toggle for it. ``ineligible_reason`` explains a null ``eligible_domain``\n(consumer email / no domain) so the UI can show why the toggle is unavailable. ``enabled`` is\nwhether ``eligible_domain`` is currently trusted (the toggle's state).",
+        "properties": {
+          "domains": {
+            "items": {
+              "$ref": "#/components/schemas/TrustedDomainView"
+            },
+            "title": "Domains",
+            "type": "array"
+          },
+          "eligible_domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eligible Domain"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "ineligible_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ineligible Reason"
+          }
+        },
+        "required": [
+          "domains",
+          "eligible_domain",
+          "ineligible_reason",
+          "enabled"
+        ],
+        "title": "TrustedDomainSettingsView",
         "type": "object"
       },
       "TrustedDomainView": {
@@ -11912,6 +13821,88 @@
         "title": "UpdateGraderConfigRequest",
         "type": "object"
       },
+      "UpdateIncidentPipelineRequest": {
+        "properties": {
+          "alert_source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IncidentPipelineAlertSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "delivery_config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeliveryConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "orchestrator_binding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IncidentPipelineOrchestratorBinding"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "routing_rule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IncidentPipelineRoutingRule"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "specialist_bindings": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/IncidentPipelineSpecialistBinding"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Specialist Bindings"
+          },
+          "trigger_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Id"
+          }
+        },
+        "title": "UpdateIncidentPipelineRequest",
+        "type": "object"
+      },
       "UpdateIssueRequest": {
         "properties": {
           "investigation_status": {
@@ -12031,6 +14022,62 @@
           }
         },
         "title": "UpdateKnowledgeBaseRequest",
+        "type": "object"
+      },
+      "UpdateReviewWorkflowRequest": {
+        "properties": {
+          "base_branch_filter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Branch Filter"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "repos": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ReviewWorkflowRepoInput"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repos"
+          },
+          "reviewer_agent_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Agent Ids"
+          }
+        },
+        "title": "UpdateReviewWorkflowRequest",
         "type": "object"
       },
       "UpdateRouteRequest": {
@@ -12399,6 +14446,17 @@
       },
       "UpdateWebhookTriggerRequest": {
         "properties": {
+          "capture_samples": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Samples"
+          },
           "description": {
             "anyOf": [
               {
@@ -12465,12 +14523,34 @@
             ],
             "title": "Signing Secret"
           },
+          "target_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Id"
+          },
+          "target_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TriggerTargetType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "webhook_type": {
             "anyOf": [
               {
                 "enum": [
                   "token",
-                  "github"
+                  "github",
+                  "bearer"
                 ],
                 "type": "string"
               },
@@ -12629,6 +14709,61 @@
         "title": "WebhookAcceptedResponse",
         "type": "object"
       },
+      "WebhookSample": {
+        "description": "A captured inbound webhook payload sample (debugging aid). Never carries the auth\ntoken/signature header \u2014 those are stripped before storage. ``body`` is the parsed JSON\npayload, size-capped; when the raw body exceeded the cap, ``truncated`` is true and ``body``\nholds a truncated string preview instead of the parsed object.",
+        "properties": {
+          "body": {
+            "title": "Body"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Headers",
+            "type": "object"
+          },
+          "received_at": {
+            "title": "Received At",
+            "type": "string"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/WebhookSampleStatus",
+            "default": "accepted"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "received_at"
+        ],
+        "title": "WebhookSample",
+        "type": "object"
+      },
+      "WebhookSampleStatus": {
+        "description": "Disposition recorded for a captured inbound webhook sample.",
+        "enum": [
+          "accepted",
+          "deduplicated",
+          "queued"
+        ],
+        "title": "WebhookSampleStatus",
+        "type": "string"
+      },
       "WebhookTriggerManifest": {
         "properties": {
           "description": {
@@ -12676,6 +14811,11 @@
       },
       "WebhookTriggerResponse": {
         "properties": {
+          "capture_samples": {
+            "default": true,
+            "title": "Capture Samples",
+            "type": "boolean"
+          },
           "created_at": {
             "title": "Created At",
             "type": "string"
@@ -12695,6 +14835,10 @@
             "default": true,
             "title": "Editable",
             "type": "boolean"
+          },
+          "endpoint_path": {
+            "title": "Endpoint Path",
+            "type": "string"
           },
           "has_token": {
             "default": false,
@@ -12731,6 +14875,11 @@
             ],
             "title": "Name"
           },
+          "sample_count": {
+            "default": 0,
+            "title": "Sample Count",
+            "type": "integer"
+          },
           "signing_credential": {
             "anyOf": [
               {
@@ -12762,11 +14911,25 @@
             "title": "Source Id"
           },
           "target_id": {
-            "title": "Target Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Id"
           },
           "target_type": {
-            "$ref": "#/components/schemas/TriggerTargetType"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TriggerTargetType"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "trigger_id": {
             "title": "Trigger Id",
@@ -12786,7 +14949,8 @@
             "default": "token",
             "enum": [
               "token",
-              "github"
+              "github",
+              "bearer"
             ],
             "title": "Webhook Type",
             "type": "string"
@@ -12794,9 +14958,8 @@
         },
         "required": [
           "trigger_id",
-          "target_type",
-          "target_id",
           "header",
+          "endpoint_path",
           "is_enabled",
           "last_fired_at",
           "created_at",
@@ -12807,6 +14970,11 @@
       },
       "WebhookTriggerWithToken": {
         "properties": {
+          "capture_samples": {
+            "default": true,
+            "title": "Capture Samples",
+            "type": "boolean"
+          },
           "created_at": {
             "title": "Created At",
             "type": "string"
@@ -12826,6 +14994,10 @@
             "default": true,
             "title": "Editable",
             "type": "boolean"
+          },
+          "endpoint_path": {
+            "title": "Endpoint Path",
+            "type": "string"
           },
           "has_token": {
             "default": false,
@@ -12862,6 +15034,11 @@
             ],
             "title": "Name"
           },
+          "sample_count": {
+            "default": 0,
+            "title": "Sample Count",
+            "type": "integer"
+          },
           "signing_credential": {
             "anyOf": [
               {
@@ -12893,11 +15070,25 @@
             "title": "Source Id"
           },
           "target_id": {
-            "title": "Target Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Id"
           },
           "target_type": {
-            "$ref": "#/components/schemas/TriggerTargetType"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TriggerTargetType"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "token": {
             "title": "Token",
@@ -12921,7 +15112,8 @@
             "default": "token",
             "enum": [
               "token",
-              "github"
+              "github",
+              "bearer"
             ],
             "title": "Webhook Type",
             "type": "string"
@@ -12929,9 +15121,8 @@
         },
         "required": [
           "trigger_id",
-          "target_type",
-          "target_id",
           "header",
+          "endpoint_path",
           "is_enabled",
           "last_fired_at",
           "created_at",
@@ -12986,6 +15177,17 @@
             ],
             "title": "Agentid"
           },
+          "credentialRef": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credentialref"
+          },
           "displayName": {
             "anyOf": [
               {
@@ -13003,6 +15205,17 @@
             },
             "title": "Integrationconnections",
             "type": "object"
+          },
+          "mcpGroupId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mcpgroupid"
           }
         },
         "title": "WorkerCatalogDeployRequest",
@@ -13050,6 +15263,11 @@
           "image": {
             "$ref": "#/components/schemas/HostedAgentImage"
           },
+          "mcpGroupRequired": {
+            "default": false,
+            "title": "Mcpgrouprequired",
+            "type": "boolean"
+          },
           "missingCredentials": {
             "items": {
               "type": "string"
@@ -13073,6 +15291,16 @@
             "title": "Requiredintegrations",
             "type": "array"
           },
+          "selfHostedImage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HostedAgentImage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -13085,6 +15313,11 @@
           "supportsMcp": {
             "default": false,
             "title": "Supportsmcp",
+            "type": "boolean"
+          },
+          "supportsSelfHosted": {
+            "default": false,
+            "title": "Supportsselfhosted",
             "type": "boolean"
           },
           "supportsTriggers": {
@@ -13127,6 +15360,90 @@
           "helpText"
         ],
         "title": "WorkerCatalogIntegration",
+        "type": "object"
+      },
+      "WorkerCatalogSelfHostedDeployRequest": {
+        "additionalProperties": false,
+        "description": "Self-hosted deploy of a catalog worker. The server validates credentials/integrations,\nmints a worker token, and returns install instructions with the catalog image.",
+        "properties": {
+          "agentId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agentid"
+          },
+          "credentialRef": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credentialref"
+          },
+          "displayName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Displayname"
+          },
+          "integrationConnections": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Integrationconnections",
+            "type": "object"
+          },
+          "mcpGroupId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mcpgroupid"
+          }
+        },
+        "title": "WorkerCatalogSelfHostedDeployRequest",
+        "type": "object"
+      },
+      "WorkerCatalogSelfHostedDeployResponse": {
+        "additionalProperties": false,
+        "description": "Response from a self-hosted catalog deploy: the token (shown once) and the agent id.",
+        "properties": {
+          "agentId": {
+            "title": "Agentid",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          },
+          "workerTokenHint": {
+            "title": "Workertokenhint",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "agentId",
+          "workerTokenHint"
+        ],
+        "title": "WorkerCatalogSelfHostedDeployResponse",
         "type": "object"
       },
       "WorkerInstanceInfo": {
@@ -13369,6 +15686,101 @@
           "exists"
         ],
         "title": "WorkerTokenStatusResponse",
+        "type": "object"
+      },
+      "WorkerTokenSummaryResponse": {
+        "description": "One worker token in an account, for the Settings token table. Carries NO secret material.\n\nSourced from the ``worker-token-<agent_id>`` credentials directly (not from agent_instances), so\ntokens of not-yet-installed agents \u2014 minted but never heart-beaten, hence with no agent row \u2014\nstill appear. Agent metadata (``id_slug``/``name``/``is_archived``/``agent_status``) is null-ish\nfor those orphan tokens: only the opaque ``agent_id`` is known until the worker registers.",
+        "properties": {
+          "agentId": {
+            "title": "Agentid",
+            "type": "string"
+          },
+          "agentStatus": {
+            "default": "unregistered",
+            "enum": [
+              "online",
+              "offline",
+              "draft",
+              "unregistered"
+            ],
+            "title": "Agentstatus",
+            "type": "string"
+          },
+          "createdAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Createdat"
+          },
+          "exists": {
+            "default": true,
+            "title": "Exists",
+            "type": "boolean"
+          },
+          "expired": {
+            "default": false,
+            "title": "Expired",
+            "type": "boolean"
+          },
+          "expiresAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expiresat"
+          },
+          "idSlug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idslug"
+          },
+          "isArchived": {
+            "default": false,
+            "title": "Isarchived",
+            "type": "boolean"
+          },
+          "lastRotatedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastrotatedat"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "agentId"
+        ],
+        "title": "WorkerTokenSummaryResponse",
         "type": "object"
       },
       "WorkflowResponse": {
@@ -14038,6 +16450,7 @@
     },
     "/a2a/{agent_id}/tasks/{task_id}:cancel": {
       "post": {
+        "description": "Cancel an in-flight A2A task (== run): flip it to cancelled and signal the worker to interrupt.\n\nAccount-scoped like every read here, so a cross-account task id reads as not-found. Already-terminal\ntasks return their current state (idempotent) rather than erroring the A2A client.",
         "operationId": "a2a_cancel_task",
         "parameters": [
           {
@@ -14135,443 +16548,6 @@
         "summary": "Subscribe Task",
         "tags": [
           "a2a"
-        ]
-      }
-    },
-    "/api/chat": {
-      "post": {
-        "operationId": "chat_chat",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChatRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              },
-              "text/event-stream": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Chat",
-        "tags": [
-          "chat"
-        ]
-      }
-    },
-    "/api/chat/models": {
-      "get": {
-        "operationId": "chat_list_chat_models",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/ChatModel"
-                  },
-                  "title": "Response Chat List Chat Models",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "List Chat Models",
-        "tags": [
-          "chat"
-        ]
-      }
-    },
-    "/api/chat/sessions": {
-      "get": {
-        "operationId": "chat_list_chat_sessions",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "agent_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Agent Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/ChatSessionSummary"
-                  },
-                  "title": "Response Chat List Chat Sessions",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Chat Sessions",
-        "tags": [
-          "chat"
-        ]
-      },
-      "post": {
-        "operationId": "chat_create_chat_session",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChatSessionCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChatSessionSummary"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Create Chat Session",
-        "tags": [
-          "chat"
-        ]
-      }
-    },
-    "/api/chat/sessions/start": {
-      "post": {
-        "operationId": "chat_start_chat_session",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChatSessionStart"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChatSessionDetail"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Start Chat Session",
-        "tags": [
-          "chat"
-        ]
-      }
-    },
-    "/api/chat/sessions/{session_id}": {
-      "delete": {
-        "operationId": "chat_delete_chat_session",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "session_id",
-            "required": true,
-            "schema": {
-              "title": "Session Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Delete Chat Session",
-        "tags": [
-          "chat"
-        ]
-      },
-      "get": {
-        "operationId": "chat_get_chat_session",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "session_id",
-            "required": true,
-            "schema": {
-              "title": "Session Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChatSessionDetail"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Chat Session",
-        "tags": [
-          "chat"
-        ]
-      },
-      "patch": {
-        "operationId": "chat_update_chat_session",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "session_id",
-            "required": true,
-            "schema": {
-              "title": "Session Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChatSessionUpdate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChatSessionSummary"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Update Chat Session",
-        "tags": [
-          "chat"
-        ]
-      }
-    },
-    "/api/chat/sessions/{session_id}/messages": {
-      "post": {
-        "operationId": "chat_stream_chat_session_message",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "session_id",
-            "required": true,
-            "schema": {
-              "title": "Session Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChatStreamRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              },
-              "text/event-stream": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Stream Chat Session Message",
-        "tags": [
-          "chat"
-        ]
-      }
-    },
-    "/api/chat/sessions/{session_id}/responses": {
-      "post": {
-        "operationId": "chat_stream_chat_response",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "session_id",
-            "required": true,
-            "schema": {
-              "title": "Session Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChatResponseRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              },
-              "text/event-stream": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Stream Chat Response",
-        "tags": [
-          "chat"
         ]
       }
     },
@@ -14876,6 +16852,89 @@
         "summary": "Enable Service Account Endpoint",
         "tags": [
           "service-accounts"
+        ]
+      }
+    },
+    "/api/v1/accounts/trusted-domains": {
+      "delete": {
+        "description": "Disable SSO auto-join for the caller's own email domain. As with enable, the domain is derived\nfrom the caller's identity, so self-serve can only remove the caller's own domain (operators use\nthe admin console to remove any domain). 404 if that domain isn't trusted on the account.",
+        "operationId": "trusted-domains_disable_trusted_domain",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "reason",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Reason"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Disable Trusted Domain",
+        "tags": [
+          "trusted-domains"
+        ]
+      },
+      "get": {
+        "description": "The current account's trusted domains plus the caller's self-serve eligibility (toggle state).",
+        "operationId": "trusted-domains_get_trusted_domains",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrustedDomainSettingsView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Trusted Domains",
+        "tags": [
+          "trusted-domains"
+        ]
+      },
+      "post": {
+        "description": "Enable SSO auto-join for the caller's own email domain. The domain is derived server-side from\nthe caller's identity \u2014 never taken from the request \u2014 so an owner can only ever trust their own\ndomain. 422 if that domain isn't eligible (consumer email / none); 409 if already trusted.",
+        "operationId": "trusted-domains_enable_trusted_domain",
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrustedDomainView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Enable Trusted Domain",
+        "tags": [
+          "trusted-domains"
         ]
       }
     },
@@ -16599,6 +18658,32 @@
         ]
       }
     },
+    "/api/v1/agents/worker-tokens": {
+      "get": {
+        "description": "List every worker token in the account for the Settings token table (metadata only).\n\nSourced from the worker-token credentials, so tokens of not-yet-installed agents (minted but never\nheart-beaten, hence with no agent row) appear alongside registered/draft ones. Declared before the\n``/{agent_id}`` routes so the literal path wins. authz_filter narrows to the agents the caller may\nread (\u00a75b), AND-ed onto the account scope inside the service; allow-all while authz is disabled.",
+        "operationId": "agents_list_worker_tokens_route",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WorkerTokenSummaryResponse"
+                  },
+                  "title": "Response Agents List Worker Tokens Route",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Worker Tokens Route",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
     "/api/v1/agents/{agent_id}": {
       "get": {
         "operationId": "agents_get_agent",
@@ -17370,6 +19455,65 @@
               ],
               "description": "Filter to one platform area, e.g. 'authorization'.",
               "title": "Category"
+            }
+          },
+          {
+            "description": "Filter by outcome (success/failure).",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/AuditStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by outcome (success/failure).",
+              "title": "Status"
+            }
+          },
+          {
+            "description": "Free-text match on action, operation, and actor (name/email/id).",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Free-text match on action, operation, and actor (name/email/id).",
+              "title": "Q"
+            }
+          },
+          {
+            "description": "Column to sort by (allow-listed).",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/AuditSortKey",
+              "default": "when",
+              "description": "Column to sort by (allow-listed)."
+            }
+          },
+          {
+            "description": "Sort direction; defaults to newest-first.",
+            "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SortOrder",
+              "default": "desc",
+              "description": "Sort direction; defaults to newest-first."
             }
           }
         ],
@@ -18846,6 +20990,443 @@
         "summary": "Update Route Endpoint",
         "tags": [
           "channels"
+        ]
+      }
+    },
+    "/api/v1/chat": {
+      "post": {
+        "operationId": "chat_chat",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Chat",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/api/v1/chat/models": {
+      "get": {
+        "operationId": "chat_list_chat_models",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ChatModel"
+                  },
+                  "title": "Response Chat List Chat Models",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Chat Models",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/api/v1/chat/sessions": {
+      "get": {
+        "operationId": "chat_list_chat_sessions",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "agent_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ChatSessionSummary"
+                  },
+                  "title": "Response Chat List Chat Sessions",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Chat Sessions",
+        "tags": [
+          "chat"
+        ]
+      },
+      "post": {
+        "operationId": "chat_create_chat_session",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatSessionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatSessionSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Chat Session",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/api/v1/chat/sessions/start": {
+      "post": {
+        "operationId": "chat_start_chat_session",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatSessionStart"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatSessionDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Chat Session",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/api/v1/chat/sessions/{session_id}": {
+      "delete": {
+        "operationId": "chat_delete_chat_session",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Chat Session",
+        "tags": [
+          "chat"
+        ]
+      },
+      "get": {
+        "operationId": "chat_get_chat_session",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatSessionDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Chat Session",
+        "tags": [
+          "chat"
+        ]
+      },
+      "patch": {
+        "operationId": "chat_update_chat_session",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatSessionUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatSessionSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Chat Session",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/api/v1/chat/sessions/{session_id}/messages": {
+      "post": {
+        "operationId": "chat_stream_chat_session_message",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatStreamRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Chat Session Message",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/api/v1/chat/sessions/{session_id}/responses": {
+      "post": {
+        "operationId": "chat_stream_chat_response",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatResponseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Chat Response",
+        "tags": [
+          "chat"
         ]
       }
     },
@@ -20615,7 +23196,8 @@
         "summary": "Hooks Events Rpc",
         "tags": [
           "hooks"
-        ]
+        ],
+        "x-agentops-audience": "worker"
       }
     },
     "/api/v1/hosted-agents": {
@@ -20677,6 +23259,42 @@
           }
         },
         "summary": "Create Hosted Agent",
+        "tags": [
+          "hosted-agents"
+        ]
+      }
+    },
+    "/api/v1/hosted-agents/{agent_id}": {
+      "delete": {
+        "description": "Clean up a cloud deploy the user is abandoning (in-progress or failed), keyed by\n``runtime_agent_id`` \u2014 distinct from ``delete_hosted_agent`` above, which decommissions a\nlive GitOps-tracked agent by ``(customer, agent_id)``. Never gates on ``deploy_status``: the\nuser may cancel an in-progress deploy just as well as clean up a failed one.",
+        "operationId": "hosted-agents_cleanup_hosted_agent_deploy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cleanup Hosted Agent Deploy",
         "tags": [
           "hosted-agents"
         ]
@@ -20831,6 +23449,490 @@
         "summary": "Update Hosted Agent",
         "tags": [
           "hosted-agents"
+        ]
+      }
+    },
+    "/api/v1/incident-pipelines": {
+      "get": {
+        "operationId": "incident-pipelines_list_incident_pipelines_endpoint",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/IncidentPipelineSummary"
+                  },
+                  "title": "Response Incident-Pipelines List Incident Pipelines Endpoint",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Incident Pipelines Endpoint",
+        "tags": [
+          "incident-pipelines"
+        ]
+      },
+      "post": {
+        "operationId": "incident-pipelines_create_incident_pipeline_endpoint",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateIncidentPipelineRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentPipelineDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Incident Pipeline Endpoint",
+        "tags": [
+          "incident-pipelines"
+        ]
+      }
+    },
+    "/api/v1/incident-pipelines/{pipeline_id}": {
+      "delete": {
+        "operationId": "incident-pipelines_delete_incident_pipeline_endpoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pipeline_id",
+            "required": true,
+            "schema": {
+              "title": "Pipeline Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Incident Pipeline Endpoint",
+        "tags": [
+          "incident-pipelines"
+        ]
+      },
+      "get": {
+        "operationId": "incident-pipelines_get_incident_pipeline_endpoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pipeline_id",
+            "required": true,
+            "schema": {
+              "title": "Pipeline Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentPipelineDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Incident Pipeline Endpoint",
+        "tags": [
+          "incident-pipelines"
+        ]
+      },
+      "patch": {
+        "operationId": "incident-pipelines_update_incident_pipeline_endpoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pipeline_id",
+            "required": true,
+            "schema": {
+              "title": "Pipeline Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateIncidentPipelineRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentPipelineDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Incident Pipeline Endpoint",
+        "tags": [
+          "incident-pipelines"
+        ]
+      }
+    },
+    "/api/v1/incident-pipelines/{pipeline_id}/activate": {
+      "post": {
+        "operationId": "incident-pipelines_activate_incident_pipeline_endpoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pipeline_id",
+            "required": true,
+            "schema": {
+              "title": "Pipeline Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentPipelineDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Activate Incident Pipeline Endpoint",
+        "tags": [
+          "incident-pipelines"
+        ]
+      }
+    },
+    "/api/v1/incident-pipelines/{pipeline_id}/pause": {
+      "post": {
+        "operationId": "incident-pipelines_pause_incident_pipeline_endpoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pipeline_id",
+            "required": true,
+            "schema": {
+              "title": "Pipeline Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentPipelineDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pause Incident Pipeline Endpoint",
+        "tags": [
+          "incident-pipelines"
+        ]
+      }
+    },
+    "/api/v1/incidents": {
+      "get": {
+        "operationId": "incidents_list_incidents_endpoint",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/IncidentStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "severity",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Severity"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pipeline_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pipeline Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PlatformIncidentSummary"
+                  },
+                  "title": "Response Incidents List Incidents Endpoint",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Incidents Endpoint",
+        "tags": [
+          "incidents"
+        ]
+      }
+    },
+    "/api/v1/incidents/{incident_id}": {
+      "get": {
+        "operationId": "incidents_get_incident_endpoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Incident Endpoint",
+        "tags": [
+          "incidents"
+        ]
+      }
+    },
+    "/api/v1/incidents/{incident_id}/resolve": {
+      "post": {
+        "operationId": "incidents_resolve_incident_endpoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformIncidentDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resolve Incident Endpoint",
+        "tags": [
+          "incidents"
+        ]
+      }
+    },
+    "/api/v1/incidents/{incident_id}/retry": {
+      "post": {
+        "operationId": "incidents_retry_incident_endpoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetryIncidentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Incident Endpoint",
+        "tags": [
+          "incidents"
         ]
       }
     },
@@ -21141,10 +24243,8 @@
         "responses": {
           "200": {
             "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
+              "application/json": {
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -21324,6 +24424,112 @@
         ]
       }
     },
+    "/api/v1/integrations/slack/channels": {
+      "get": {
+        "operationId": "integrations_list_slack_channels",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SlackChannelsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Slack Channels",
+        "tags": [
+          "integrations"
+        ]
+      }
+    },
+    "/api/v1/integrations/slack/channels/resolve": {
+      "get": {
+        "description": "Resolve a channel name to an ID using the user token.",
+        "operationId": "integrations_resolve_slack_channel",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SlackChannelResolved"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resolve Slack Channel",
+        "tags": [
+          "integrations"
+        ]
+      }
+    },
+    "/api/v1/integrations/slack/channels/{channel_id}/bot-access": {
+      "get": {
+        "operationId": "integrations_check_slack_bot_access",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "channel_id",
+            "required": true,
+            "schema": {
+              "title": "Channel Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SlackBotAccess"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check Slack Bot Access",
+        "tags": [
+          "integrations"
+        ]
+      }
+    },
     "/api/v1/issues": {
       "get": {
         "operationId": "issues_list_issues_endpoint",
@@ -21498,6 +24704,9 @@
             },
             "description": "Successful Response"
           },
+          "409": {
+            "description": "A knowledge base with this name already exists"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -21645,6 +24854,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "409": {
+            "description": "A knowledge base with this name already exists"
           },
           "422": {
             "content": {
@@ -21881,7 +25093,8 @@
         ]
       },
       "post": {
-        "operationId": "knowledge_upload_document",
+        "description": "Ingest one or more documents. Metadata form fields apply to every file in the batch;\n`title` only applies to a single-file upload (multi-file titles come from each file's\nOKF frontmatter or filename). The count cap is validated before any body is read (so\npeak buffering is bounded at MAX_FILES_PER_BATCH x MAX_DOCUMENT_BYTES); per-file size\nvalidation runs after buffering but before any ingest, so an oversized batch or file\nrejects the whole request. A mid-batch ingest failure leaves the already-ingested files\nin place (same outcome as uploading them one by one).",
+        "operationId": "knowledge_upload_documents",
         "parameters": [
           {
             "in": "path",
@@ -21897,7 +25110,7 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/Body_knowledge_upload_document"
+                "$ref": "#/components/schemas/Body_knowledge_upload_documents"
               }
             }
           },
@@ -21908,7 +25121,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/KBDocumentSummary"
+                  "items": {
+                    "$ref": "#/components/schemas/KBDocumentSummary"
+                  },
+                  "title": "Response Knowledge Upload Documents",
+                  "type": "array"
                 }
               }
             },
@@ -21925,7 +25142,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Upload Document",
+        "summary": "Upload Documents",
         "tags": [
           "knowledge"
         ]
@@ -22124,7 +25341,8 @@
         "summary": "Search Knowledge",
         "tags": [
           "knowledge"
-        ]
+        ],
+        "x-agentops-audience": "worker"
       }
     },
     "/api/v1/llm-usage": {
@@ -22418,6 +25636,500 @@
         ]
       }
     },
+    "/api/v1/review-workflows": {
+      "get": {
+        "operationId": "review-workflows_list_review_workflows_endpoint",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ReviewWorkflowSummary"
+                  },
+                  "title": "Response Review-Workflows List Review Workflows Endpoint",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Review Workflows Endpoint",
+        "tags": [
+          "review-workflows"
+        ]
+      },
+      "post": {
+        "operationId": "review-workflows_create_review_workflow_endpoint",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateReviewWorkflowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewWorkflowDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Review Workflow Endpoint",
+        "tags": [
+          "review-workflows"
+        ]
+      }
+    },
+    "/api/v1/review-workflows/github-repos": {
+      "get": {
+        "description": "Repos the account's connected GitHub App integration can see, for the wizard's repo\npicker. Empty (not an error) when no App-based integration is connected \u2014 the wizard falls\nback to manual repo entry + manual webhook instructions in that case.",
+        "operationId": "review-workflows_list_github_repos_endpoint",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GithubRepoOption"
+                  },
+                  "title": "Response Review-Workflows List Github Repos Endpoint",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Github Repos Endpoint",
+        "tags": [
+          "review-workflows"
+        ]
+      }
+    },
+    "/api/v1/review-workflows/{workflow_id}": {
+      "delete": {
+        "operationId": "review-workflows_delete_review_workflow_endpoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Review Workflow Endpoint",
+        "tags": [
+          "review-workflows"
+        ]
+      },
+      "get": {
+        "operationId": "review-workflows_get_review_workflow_endpoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewWorkflowDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Review Workflow Endpoint",
+        "tags": [
+          "review-workflows"
+        ]
+      },
+      "patch": {
+        "operationId": "review-workflows_update_review_workflow_endpoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateReviewWorkflowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewWorkflowDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Review Workflow Endpoint",
+        "tags": [
+          "review-workflows"
+        ]
+      }
+    },
+    "/api/v1/review-workflows/{workflow_id}/activate": {
+      "post": {
+        "operationId": "review-workflows_activate_review_workflow_endpoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewWorkflowDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Activate Review Workflow Endpoint",
+        "tags": [
+          "review-workflows"
+        ]
+      }
+    },
+    "/api/v1/review-workflows/{workflow_id}/pause": {
+      "post": {
+        "operationId": "review-workflows_pause_review_workflow_endpoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewWorkflowDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pause Review Workflow Endpoint",
+        "tags": [
+          "review-workflows"
+        ]
+      }
+    },
+    "/api/v1/reviewers": {
+      "get": {
+        "description": "Unguarded, like the other Code Review Platform list endpoints \u2014 this is a picker/catalog\nread, not a sensitive resource, and reuses the account's existing agent-read visibility.",
+        "operationId": "reviewers_list_reviewers_endpoint",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ReviewerSummary"
+                  },
+                  "title": "Response Reviewers List Reviewers Endpoint",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Reviewers Endpoint",
+        "tags": [
+          "reviewers"
+        ]
+      }
+    },
+    "/api/v1/reviews": {
+      "get": {
+        "operationId": "reviews_list_reviews_endpoint",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ReviewStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "repo",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Repo"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workflow_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workflow Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ReviewSummary"
+                  },
+                  "title": "Response Reviews List Reviews Endpoint",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Reviews Endpoint",
+        "tags": [
+          "reviews"
+        ]
+      }
+    },
+    "/api/v1/reviews/{review_id}": {
+      "get": {
+        "operationId": "reviews_get_review_endpoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "review_id",
+            "required": true,
+            "schema": {
+              "title": "Review Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Review Endpoint",
+        "tags": [
+          "reviews"
+        ]
+      }
+    },
+    "/api/v1/reviews/{review_id}/rereview": {
+      "post": {
+        "operationId": "reviews_rereview_endpoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "review_id",
+            "required": true,
+            "schema": {
+              "title": "Review Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RereviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rereview Endpoint",
+        "tags": [
+          "reviews"
+        ]
+      }
+    },
     "/api/v1/runs": {
       "get": {
         "description": "Latest `limit` runs newest-first (optionally scoped to one ``agent_id``), or \u2014 with\n?thread_id \u2014 the full continuation chain for one thread, oldest-first.",
@@ -22690,7 +26402,8 @@
         "summary": "Start Direct",
         "tags": [
           "runs"
-        ]
+        ],
+        "x-agentops-audience": "worker"
       }
     },
     "/api/v1/runs/{run_id}": {
@@ -22828,7 +26541,8 @@
         "summary": "Create Run Artifact",
         "tags": [
           "runs"
-        ]
+        ],
+        "x-agentops-audience": "worker"
       }
     },
     "/api/v1/runs/{run_id}/artifacts/{artifact_id}": {
@@ -22938,6 +26652,67 @@
         "summary": "Update Run Artifact",
         "tags": [
           "runs"
+        ],
+        "x-agentops-audience": "worker"
+      }
+    },
+    "/api/v1/runs/{run_id}/cancel": {
+      "post": {
+        "description": "Cancel an active run (queued/claimed/running \u2192 cancelled).\n\nQueued cancel is exact (the run just leaves the queue). For a claimed/running run the owning worker\nis also signalled to interrupt the in-flight handler (gated by ``run_cancel_signal_enabled``); if\nthat can't be delivered the cancel falls back to advisory \u2014 the worker's later report is a no-op and\nits result is discarded.",
+        "operationId": "runs_cancel",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CancelRunRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel",
+        "tags": [
+          "runs"
         ]
       }
     },
@@ -22990,7 +26765,8 @@
         "summary": "Complete",
         "tags": [
           "runs"
-        ]
+        ],
+        "x-agentops-audience": "worker"
       }
     },
     "/api/v1/runs/{run_id}/events": {
@@ -23042,7 +26818,8 @@
         "summary": "Ingest Events",
         "tags": [
           "runs"
-        ]
+        ],
+        "x-agentops-audience": "worker"
       }
     },
     "/api/v1/runs/{run_id}/fail": {
@@ -23094,7 +26871,8 @@
         "summary": "Fail",
         "tags": [
           "runs"
-        ]
+        ],
+        "x-agentops-audience": "worker"
       }
     },
     "/api/v1/runs/{run_id}/messages": {
@@ -23146,7 +26924,8 @@
         "summary": "Add Message",
         "tags": [
           "runs"
-        ]
+        ],
+        "x-agentops-audience": "worker"
       }
     },
     "/api/v1/runs/{run_id}/revive": {
@@ -23307,7 +27086,8 @@
         "summary": "Start",
         "tags": [
           "runs"
-        ]
+        ],
+        "x-agentops-audience": "worker"
       }
     },
     "/api/v1/schedules": {
@@ -23709,7 +27489,7 @@
     },
     "/api/v1/session/accounts": {
       "get": {
-        "description": "All accounts (optionally name/slug-filtered) \u2014 the system-admin cross-account switch targets.\nSystem-admin only; ordinary members switch among ``member_accounts`` from /auth/me instead.",
+        "description": "Active accounts (optionally name/slug-filtered) \u2014 the system-admin cross-account switch\ntargets. System-admin only; ordinary members switch among ``member_accounts`` from /auth/me\ninstead. Only ACTIVE accounts are returned (you can't switch into a suspended tenant), and\n``limit`` is unbounded by default so the switcher pulls every active account once and resolves\nany slug client-side \u2014 no silent miss for an account past a fixed cap. A positive ``limit`` still\ncaps the result if a caller wants to page.",
         "operationId": "session_list_all_accounts",
         "parameters": [
           {
@@ -23726,6 +27506,23 @@
                 }
               ],
               "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
             }
           }
         ],
@@ -24285,6 +28082,95 @@
         ]
       }
     },
+    "/api/v1/triggers/{trigger_id}/samples": {
+      "get": {
+        "operationId": "triggers_list_trigger_samples_endpoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trigger_id",
+            "required": true,
+            "schema": {
+              "title": "Trigger Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WebhookSample"
+                  },
+                  "title": "Response Triggers List Trigger Samples Endpoint",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Trigger Samples Endpoint",
+        "tags": [
+          "triggers"
+        ]
+      }
+    },
+    "/api/v1/webhooks/endpoint/{trigger_id}": {
+      "post": {
+        "description": "Standalone endpoint ingest \u2014 stable id-based URL, independent of any target.",
+        "operationId": "webhooks_trigger_endpoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trigger_id",
+            "required": true,
+            "schema": {
+              "title": "Trigger Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EndpointWebhookAcceptedResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trigger Endpoint",
+        "tags": [
+          "webhooks"
+        ]
+      }
+    },
     "/api/v1/webhooks/workflows/{workflow_id}": {
       "post": {
         "operationId": "webhooks_trigger_workflow",
@@ -24446,6 +28332,58 @@
         ]
       }
     },
+    "/api/v1/worker-catalog/{catalog_id}/self-hosted-deploy": {
+      "post": {
+        "operationId": "worker-catalog_self_hosted_deploy_worker_catalog",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "catalog_id",
+            "required": true,
+            "schema": {
+              "title": "Catalog Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkerCatalogSelfHostedDeployRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerCatalogSelfHostedDeployResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Self Hosted Deploy Worker Catalog",
+        "tags": [
+          "worker-catalog"
+        ]
+      }
+    },
     "/api/v1/workers/grade-context/{grade_run_id}": {
       "get": {
         "description": "Return the run a grader was dispatched to evaluate, plus its binding's guidelines.\n\nWorker-authenticated and authorized by grade-run ownership (when worker auth is on, the\nauthenticated caller must own ``grade_run_id``), so a grader pulls only the run it was asked\nto grade \u2014 it never reads arbitrary runs and never writes scores. Lets the control plane push\nan empty grade-run payload instead of inlining (and persisting a duplicate of) the target\nrun's I/O. With worker auth off (open/local clusters) the caller is unauthenticated and the\ngrader is taken from the grade run itself.",
@@ -24486,7 +28424,8 @@
         "summary": "Fetch Grade Context",
         "tags": [
           "workers"
-        ]
+        ],
+        "x-agentops-audience": "worker"
       }
     },
     "/api/v1/workers/integrations/github/token": {
@@ -24512,7 +28451,8 @@
         "summary": "Fetch Github Integration Token",
         "tags": [
           "workers"
-        ]
+        ],
+        "x-agentops-audience": "worker"
       }
     },
     "/api/v1/workers/secrets": {
@@ -24534,7 +28474,8 @@
         "summary": "Fetch On Demand Secrets",
         "tags": [
           "workers"
-        ]
+        ],
+        "x-agentops-audience": "worker"
       }
     },
     "/api/v1/workers/{worker_id}/channel": {
@@ -24574,7 +28515,8 @@
         "summary": "Worker Channel",
         "tags": [
           "workers"
-        ]
+        ],
+        "x-agentops-audience": "worker"
       }
     },
     "/api/v1/workers/{worker_id}/heartbeat": {
@@ -24642,7 +28584,8 @@
         "summary": "Heartbeat",
         "tags": [
           "workers"
-        ]
+        ],
+        "x-agentops-audience": "worker"
       }
     },
     "/api/v1/workers/{worker_id}/runs/claim": {
@@ -24694,7 +28637,8 @@
         "summary": "Claim Run",
         "tags": [
           "workers"
-        ]
+        ],
+        "x-agentops-audience": "worker"
       }
     },
     "/api/v1/workflows": {
@@ -24743,6 +28687,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "409": {
+            "description": "A workflow with this name already exists"
           },
           "422": {
             "content": {
@@ -24868,6 +28815,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "409": {
+            "description": "A workflow with this name already exists"
           },
           "422": {
             "content": {
