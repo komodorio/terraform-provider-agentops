@@ -23,7 +23,7 @@ An incident pipeline (incident workflow): routes inbound alerts from a provider 
 # key for the claude-sonnet-5 model below).
 resource "agentops_credential" "specialist_llm_key" {
   name  = "specialist-llm-key"
-  value = var.ai_api_key # write-only; never read back
+  value = var.specialist_llm_key # write-only; never read back
 }
 
 # ── Orchestrator: deployed from the worker catalog ───────────────────────────
