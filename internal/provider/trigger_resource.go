@@ -141,6 +141,7 @@ func (r *triggerResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
+	targetType := gen.TriggerTargetType(plan.TargetType.ValueString())
 	body := gen.CreateWebhookTriggerRequest{
 		Name:                stringToPtr(plan.Name),
 		Description:         stringToPtr(plan.Description),
@@ -148,8 +149,8 @@ func (r *triggerResource) Create(ctx context.Context, req resource.CreateRequest
 		IsEnabled:           boolToPtr(plan.IsEnabled),
 		SigningCredentialId: stringToPtr(plan.SigningCredentialID),
 		SigningSecret:       stringToPtr(plan.SigningSecret),
-		TargetId:            plan.TargetID.ValueString(),
-		TargetType:          gen.TriggerTargetType(plan.TargetType.ValueString()),
+		TargetId:            plan.TargetID.ValueStringPointer(),
+		TargetType:          &targetType,
 	}
 	if !plan.WebhookType.IsNull() && !plan.WebhookType.IsUnknown() {
 		wt := gen.CreateWebhookTriggerRequestWebhookType(plan.WebhookType.ValueString())
@@ -173,7 +174,7 @@ func (r *triggerResource) Create(ctx context.Context, req resource.CreateRequest
 	t := apiResp.JSON201
 	plan.ID = types.StringValue(t.TriggerId)
 	plan.Token = types.StringValue(t.Token)
-	applyTriggerCommon(&plan, t.Name, t.Description, t.Header, t.IsEnabled, t.TargetId, string(t.TargetType),
+	applyTriggerCommon(&plan, t.Name, t.Description, t.Header, t.IsEnabled, t.TargetId, t.TargetType,
 		enumPtrToString(t.WebhookType), signingCredentialID(t.SigningCredential), t.CreatedAt, t.UpdatedAt)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
@@ -206,7 +207,7 @@ func (r *triggerResource) Read(ctx context.Context, req resource.ReadRequest, re
 
 	t := apiResp.JSON200
 	// Token and signing_secret are never returned; preserve the existing state.
-	applyTriggerCommon(&state, t.Name, t.Description, t.Header, t.IsEnabled, t.TargetId, string(t.TargetType),
+	applyTriggerCommon(&state, t.Name, t.Description, t.Header, t.IsEnabled, t.TargetId, t.TargetType,
 		enumPtrToString(t.WebhookType), signingCredentialID(t.SigningCredential), t.CreatedAt, t.UpdatedAt)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
@@ -248,7 +249,7 @@ func (r *triggerResource) Update(ctx context.Context, req resource.UpdateRequest
 
 	t := apiResp.JSON200
 	// Update does not return the token; keep the value already in the plan/state.
-	applyTriggerCommon(&plan, t.Name, t.Description, t.Header, t.IsEnabled, t.TargetId, string(t.TargetType),
+	applyTriggerCommon(&plan, t.Name, t.Description, t.Header, t.IsEnabled, t.TargetId, t.TargetType,
 		enumPtrToString(t.WebhookType), signingCredentialID(t.SigningCredential), t.CreatedAt, t.UpdatedAt)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
@@ -279,13 +280,13 @@ func (r *triggerResource) ImportState(ctx context.Context, req resource.ImportSt
 // into the model. Token and signing_secret are deliberately not touched here
 // because the API never returns them on read/update.
 func applyTriggerCommon(m *triggerResourceModel, name, description *string, header string, isEnabled bool,
-	targetID, targetType, webhookType, signingCredentialID string, createdAt, updatedAt string) {
+	targetID *string, targetType *gen.TriggerTargetType, webhookType, signingCredentialID string, createdAt, updatedAt string) {
 	m.Name = ptrToString(name)
 	m.Description = ptrToString(description)
 	m.Header = types.StringValue(header)
 	m.IsEnabled = types.BoolValue(isEnabled)
-	m.TargetID = types.StringValue(targetID)
-	m.TargetType = types.StringValue(targetType)
+	m.TargetID = ptrToString(targetID)
+	m.TargetType = strOrNull(enumPtrToString(targetType))
 	m.WebhookType = strOrNull(webhookType)
 	m.SigningCredentialID = strOrNull(signingCredentialID)
 	m.CreatedAt = types.StringValue(createdAt)

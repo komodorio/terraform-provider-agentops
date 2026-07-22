@@ -5,7 +5,9 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 
+	"github.com/hashicorp/terraform-plugin-framework-jsontypes/jsontypes"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
@@ -27,6 +29,16 @@ func boolToPtr(v types.Bool) *bool {
 	}
 	b := v.ValueBool()
 	return &b
+}
+
+// int64ToIntPtr converts a Terraform int64 into a *int request field, mapping
+// null/unknown to nil so the field is omitted.
+func int64ToIntPtr(v types.Int64) *int {
+	if v.IsNull() || v.IsUnknown() {
+		return nil
+	}
+	i := int(v.ValueInt64())
+	return &i
 }
 
 // ptrToString converts an optional API string into a Terraform string, mapping
@@ -63,6 +75,74 @@ func enumPtrToString[T ~string](p *T) string {
 		return ""
 	}
 	return string(*p)
+}
+
+// stringMapToPtr converts an optional Terraform map into a *map[string]string
+// request field, leaving it nil (omitted) when the map is null or unknown.
+func stringMapToPtr(ctx context.Context, m types.Map, target **map[string]string) diag.Diagnostics {
+	if m.IsNull() || m.IsUnknown() {
+		return nil
+	}
+	out := map[string]string{}
+	diags := m.ElementsAs(ctx, &out, false)
+	if diags.HasError() {
+		return diags
+	}
+	*target = &out
+	return diags
+}
+
+// stringMapValue maps an optional API string map to a Terraform map, mapping nil
+// to a null map.
+func stringMapValue(ctx context.Context, p *map[string]string) (types.Map, diag.Diagnostics) {
+	if p == nil {
+		return types.MapNull(types.StringType), nil
+	}
+	return types.MapValueFrom(ctx, types.StringType, *p)
+}
+
+// boolMapToPtr converts an optional Terraform map of booleans into a
+// *map[string]bool request field, leaving it nil (omitted) when null or unknown.
+func boolMapToPtr(ctx context.Context, m types.Map, target **map[string]bool) diag.Diagnostics {
+	if m.IsNull() || m.IsUnknown() {
+		return nil
+	}
+	out := map[string]bool{}
+	diags := m.ElementsAs(ctx, &out, false)
+	if diags.HasError() {
+		return diags
+	}
+	*target = &out
+	return diags
+}
+
+// jsonToMapPtr unmarshals a normalized JSON-string attribute into the free-form
+// map expected by a request body, leaving it nil (omitted) when null or unknown.
+func jsonToMapPtr(v jsontypes.Normalized, target **map[string]interface{}) diag.Diagnostics {
+	var diags diag.Diagnostics
+	if v.IsNull() || v.IsUnknown() {
+		return diags
+	}
+	var m map[string]interface{}
+	if err := json.Unmarshal([]byte(v.ValueString()), &m); err != nil {
+		diags.AddError("Invalid JSON attribute", "Failed to parse a JSON object attribute: "+err.Error())
+		return diags
+	}
+	*target = &m
+	return diags
+}
+
+// mapPtrToJSON renders an optional free-form map from a response back into a
+// normalized JSON-string attribute, mapping a nil/empty map to null.
+func mapPtrToJSON(m *map[string]interface{}) jsontypes.Normalized {
+	if m == nil || len(*m) == 0 {
+		return jsontypes.NewNormalizedNull()
+	}
+	b, err := json.Marshal(*m)
+	if err != nil {
+		return jsontypes.NewNormalizedNull()
+	}
+	return jsontypes.NewNormalizedValue(string(b))
 }
 
 // listToStringSlice converts an optional Terraform list into a *[]string request
