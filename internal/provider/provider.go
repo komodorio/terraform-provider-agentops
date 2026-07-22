@@ -129,6 +129,7 @@ func (p *KomodorAgentOpsProvider) Resources(ctx context.Context) []func() resour
 		NewChannelResource,
 		NewChannelRouteResource,
 		NewHostedAgentResource,
+		NewWorkerCatalogDeploymentResource,
 	}
 }
 

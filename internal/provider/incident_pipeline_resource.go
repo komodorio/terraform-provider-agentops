@@ -318,6 +318,25 @@ func (r *incidentPipelineResource) Create(ctx context.Context, req resource.Crea
 
 	desired := statusTarget(plan.Status)
 	detail := apiResp.JSON201
+
+	// The create endpoint does not accept a trigger (endpoint); link it via update so
+	// the pipeline can be activated — activation requires a linked endpoint.
+	if v := plan.TriggerID; !v.IsNull() && !v.IsUnknown() && v.ValueString() != "" {
+		linked, err := r.client.Gen.IncidentPipelinesUpdateIncidentPipelineEndpointWithResponse(ctx, detail.Id,
+			gen.UpdateIncidentPipelineRequest{TriggerId: stringToPtr(v)})
+		if err != nil {
+			resp.Diagnostics.AddError("Error linking endpoint to incident pipeline", err.Error())
+			return
+		}
+		if err := client.Check(linked.HTTPResponse, linked.Body); err != nil {
+			resp.Diagnostics.AddError("Error linking endpoint to incident pipeline", err.Error())
+			return
+		}
+		if linked.JSON200 != nil {
+			detail = linked.JSON200
+		}
+	}
+
 	detail = r.reconcileStatus(ctx, detail.Id, desired, detail, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return

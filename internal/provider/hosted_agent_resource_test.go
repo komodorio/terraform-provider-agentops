@@ -62,7 +62,6 @@ func TestAccHostedAgentResource(t *testing.T) {
 func testAccHostedAgentConfig(endpoint, model string) string {
 	return mockProviderConfig(endpoint) + fmt.Sprintf(`
 resource "agentops_hosted_agent" "test" {
-  customer       = "acme"
   agent_id       = "triage"
   instructions   = "Triage incoming alerts."
   credential_ref = "cred_1"

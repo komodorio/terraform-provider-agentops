@@ -961,6 +961,28 @@
             ],
             "title": "Endpoint Url"
           },
+          "hosted_agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hosted Agent Id"
+          },
+          "hosted_customer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hosted Customer"
+          },
           "id_slug": {
             "default": "",
             "title": "Id Slug",
@@ -1001,6 +1023,11 @@
           "is_enabled": {
             "default": false,
             "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "is_hosted": {
+            "default": false,
+            "title": "Is Hosted",
             "type": "boolean"
           },
           "labels": {
@@ -5943,8 +5970,15 @@
             "type": "string"
           },
           "customer": {
-            "title": "Customer",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer"
           },
           "displayName": {
             "default": "",
@@ -6010,7 +6044,6 @@
           }
         },
         "required": [
-          "customer",
           "agentId",
           "instructions",
           "credentialRef"
@@ -24447,7 +24480,7 @@
     },
     "/api/v1/integrations/slack/channels/resolve": {
       "get": {
-        "description": "Resolve a channel name to an ID using the user token.",
+        "description": "Resolve a channel name to an ID.\n\nTries users_conversations first (fast \u2014 bot-member channels only).\nFalls back to conversations_list with the user token for channels the\nbot hasn't joined yet.",
         "operationId": "integrations_resolve_slack_channel",
         "parameters": [
           {
