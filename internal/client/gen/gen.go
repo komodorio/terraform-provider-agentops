@@ -2287,6 +2287,8 @@ type AgentInstanceResponse struct {
 	Description       *string                     `json:"description,omitempty"`
 	DraftConfig       *map[string]interface{}     `json:"draft_config,omitempty"`
 	EndpointUrl       *string                     `json:"endpoint_url,omitempty"`
+	HostedAgentId     *string                     `json:"hosted_agent_id,omitempty"`
+	HostedCustomer    *string                     `json:"hosted_customer,omitempty"`
 	IdSlug            *string                     `json:"id_slug,omitempty"`
 	InputSchema       *map[string]interface{}     `json:"input_schema,omitempty"`
 	Instances         *[]WorkerInstanceInfo       `json:"instances,omitempty"`
@@ -2295,6 +2297,7 @@ type AgentInstanceResponse struct {
 	InstancesTotal    *int                        `json:"instances_total,omitempty"`
 	IsArchived        *bool                       `json:"is_archived,omitempty"`
 	IsEnabled         *bool                       `json:"is_enabled,omitempty"`
+	IsHosted          *bool                       `json:"is_hosted,omitempty"`
 	Labels            *map[string]string          `json:"labels,omitempty"`
 	LastHeartbeatAt   *string                     `json:"last_heartbeat_at,omitempty"`
 	LatestRunAt       *string                     `json:"latest_run_at,omitempty"`
@@ -3413,7 +3416,7 @@ type HostedAgentCreateRequest struct {
 	Capabilities  *map[string]bool        `json:"capabilities,omitempty"`
 	CommitMessage *string                 `json:"commitMessage,omitempty"`
 	CredentialRef string                  `json:"credentialRef"`
-	Customer      string                  `json:"customer"`
+	Customer      *string                 `json:"customer,omitempty"`
 	DisplayName   *string                 `json:"displayName,omitempty"`
 	Image         *HostedAgentImage       `json:"image,omitempty"`
 	Instructions  string                  `json:"instructions"`

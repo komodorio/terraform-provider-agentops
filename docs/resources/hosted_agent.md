@@ -14,7 +14,7 @@ A Komodor-hosted agent: a managed agent deployment built from instructions, skil
 
 ```terraform
 resource "agentops_hosted_agent" "triage" {
-  customer       = "acme"
+  # customer is optional: the server derives it from your account when omitted.
   agent_id       = "incident-triage"
   instructions   = "Triage incoming production alerts and page the on-call when severity is high."
   credential_ref = "cred_01hxyz"
@@ -41,13 +41,13 @@ resource "agentops_hosted_agent" "triage" {
 
 - `agent_id` (String) Stable agent identifier within the customer. Changing this forces a new hosted agent.
 - `credential_ref` (String) Reference to the credential the agent runs with. Write-only.
-- `customer` (String) Customer/tenant the agent is hosted for. Changing this forces a new hosted agent.
 - `instructions` (String) System instructions for the agent. Write-only.
 
 ### Optional
 
 - `capabilities` (Map of Boolean) Capability toggles for the agent. Write-only.
 - `commit_message` (String) Commit message recorded when the agent's generated repo is updated. Write-only.
+- `customer` (String) Customer/tenant the agent is hosted for. Optional: the server derives it from your account when omitted. Changing this forces a new hosted agent.
 - `display_name` (String) Human-readable name. Write-only.
 - `image` (Attributes) Container image overrides for the agent runtime. Write-only. (see [below for nested schema](#nestedatt--image))
 - `mcp_group_id` (String) ID of an MCP gateway group to attach. Write-only.

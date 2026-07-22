@@ -114,9 +114,11 @@ func (r *hostedAgentResource) Schema(ctx context.Context, req resource.SchemaReq
 				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"customer": schema.StringAttribute{
-				MarkdownDescription: "Customer/tenant the agent is hosted for. Changing this forces a new hosted agent.",
-				Required:            true,
-				PlanModifiers:       []planmodifier.String{stringplanmodifier.RequiresReplace()},
+				MarkdownDescription: "Customer/tenant the agent is hosted for. Optional: the server derives it from " +
+					"your account when omitted. Changing this forces a new hosted agent.",
+				Optional:      true,
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace(), stringplanmodifier.UseStateForUnknown()},
 			},
 			"agent_id": schema.StringAttribute{
 				MarkdownDescription: "Stable agent identifier within the customer. Changing this forces a new hosted agent.",
@@ -263,7 +265,7 @@ func (r *hostedAgentResource) Create(ctx context.Context, req resource.CreateReq
 	}
 
 	body := gen.HostedAgentCreateRequest{
-		Customer:      plan.Customer.ValueString(),
+		Customer:      stringToPtr(plan.Customer),
 		AgentId:       plan.AgentID.ValueString(),
 		Instructions:  plan.Instructions.ValueString(),
 		CredentialRef: plan.CredentialRef.ValueString(),
@@ -489,7 +491,7 @@ func (r *hostedAgentResource) waitForOnlineIfRequested(ctx context.Context, plan
 		return
 	}
 
-	final, err := r.waitForHostedAgentOnline(ctx, plan.Customer.ValueString(), plan.AgentID.ValueString(), timeout)
+	final, err := waitForHostedAgentOnline(ctx, r.client, plan.Customer.ValueString(), plan.AgentID.ValueString(), timeout)
 	if err != nil {
 		diags.Append(state.Set(ctx, plan)...)
 		diags.AddError("Timed out waiting for hosted agent to become online", err.Error())
@@ -499,12 +501,14 @@ func (r *hostedAgentResource) waitForOnlineIfRequested(ctx context.Context, plan
 }
 
 // waitForHostedAgentOnline polls the hosted agent until its status is online,
-// returning an error if it reports deploy_failed or the timeout elapses.
-func (r *hostedAgentResource) waitForHostedAgentOnline(ctx context.Context, customer, agentID string, timeout time.Duration) (*gen.HostedAgentResponse, error) {
+// returning an error if it reports deploy_failed or the timeout elapses. It is a
+// package function so every resource that produces a hosted agent (a direct
+// create or a worker-catalog deploy) can share the same wait behaviour.
+func waitForHostedAgentOnline(ctx context.Context, cl *client.Client, customer, agentID string, timeout time.Duration) (*gen.HostedAgentResponse, error) {
 	deadline := time.Now().Add(timeout)
 	last := ""
 	for {
-		apiResp, err := r.client.Gen.HostedAgentsGetHostedAgentWithResponse(ctx, customer, agentID)
+		apiResp, err := cl.Gen.HostedAgentsGetHostedAgentWithResponse(ctx, customer, agentID)
 		if err != nil {
 			return nil, err
 		}

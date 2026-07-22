@@ -1,6 +1,7 @@
 # Self-contained incident pipeline: Terraform creates the credential and the
 # orchestrator + specialist agents, then wires them into the pipeline. No
-# pre-existing IDs required.
+# pre-existing IDs required. The agents' `customer` (tenant) is derived from your
+# account by the server, so it is left unset.
 
 # The agents' LLM key. credential_ref resolves this credential by NAME, so the
 # key must match the provider of the `model` each agent runs (an Anthropic key
@@ -12,7 +13,6 @@ resource "agentops_credential" "ai_api_key" {
 
 # ── Agents the pipeline drives ───────────────────────────────────────────────
 resource "agentops_hosted_agent" "orchestrator" {
-  customer       = "acme"
   agent_id       = "incident-orchestrator"
   instructions   = "Triage inbound production alerts and delegate to specialists."
   credential_ref = agentops_credential.ai_api_key.name
@@ -20,7 +20,6 @@ resource "agentops_hosted_agent" "orchestrator" {
 }
 
 resource "agentops_hosted_agent" "db_specialist" {
-  customer       = "acme"
   agent_id       = "incident-db-specialist"
   instructions   = "Investigate database-related incidents."
   credential_ref = agentops_credential.ai_api_key.name
@@ -28,7 +27,6 @@ resource "agentops_hosted_agent" "db_specialist" {
 }
 
 resource "agentops_hosted_agent" "net_specialist" {
-  customer       = "acme"
   agent_id       = "incident-net-specialist"
   instructions   = "Investigate networking-related incidents."
   credential_ref = agentops_credential.ai_api_key.name

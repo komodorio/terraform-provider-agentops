@@ -87,12 +87,13 @@ var (
 )
 
 var (
-	graderConfigIDRe    = regexp.MustCompile(`^/api/v1/grader-configs/([^/]+)$`)
-	channelIDRe         = regexp.MustCompile(`^/api/v1/channels/([^/]+)$`)
-	channelActionRe     = regexp.MustCompile(`^/api/v1/channels/([^/]+)/(pause|resume)$`)
-	channelRoutesRe     = regexp.MustCompile(`^/api/v1/channels/([^/]+)/routes$`)
-	channelRouteIDRe    = regexp.MustCompile(`^/api/v1/channels/([^/]+)/routes/([^/]+)$`)
-	hostedAgentByPathRe = regexp.MustCompile(`^/api/v1/hosted-agents/([^/]+)/([^/]+)$`)
+	graderConfigIDRe      = regexp.MustCompile(`^/api/v1/grader-configs/([^/]+)$`)
+	channelIDRe           = regexp.MustCompile(`^/api/v1/channels/([^/]+)$`)
+	channelActionRe       = regexp.MustCompile(`^/api/v1/channels/([^/]+)/(pause|resume)$`)
+	channelRoutesRe       = regexp.MustCompile(`^/api/v1/channels/([^/]+)/routes$`)
+	channelRouteIDRe      = regexp.MustCompile(`^/api/v1/channels/([^/]+)/routes/([^/]+)$`)
+	hostedAgentByPathRe   = regexp.MustCompile(`^/api/v1/hosted-agents/([^/]+)/([^/]+)$`)
+	workerCatalogDeployRe = regexp.MustCompile(`^/api/v1/worker-catalog/([^/]+)/deploy$`)
 )
 
 func newMockServer(t *testing.T) *mockServer {
@@ -238,6 +239,9 @@ func (m *mockServer) handle(w http.ResponseWriter, r *http.Request) {
 	case hostedAgentByPathRe.MatchString(r.URL.Path):
 		mm := hostedAgentByPathRe.FindStringSubmatch(r.URL.Path)
 		m.hostedAgentByPath(w, r, mm[1], mm[2])
+	case workerCatalogDeployRe.MatchString(r.URL.Path) && r.Method == http.MethodPost:
+		mm := workerCatalogDeployRe.FindStringSubmatch(r.URL.Path)
+		m.deployWorkerCatalog(w, r, mm[1])
 
 	default:
 		if m.dispatchCRUD(w, r) {
@@ -996,7 +1000,39 @@ func (m *mockServer) channelRouteByID(w http.ResponseWriter, r *http.Request, ch
 func (m *mockServer) createHostedAgent(w http.ResponseWriter, r *http.Request) {
 	body := decode(r)
 	customer := toString(body["customer"])
+	if customer == "" {
+		customer = "acme" // server derives the customer from the account when omitted
+	}
 	agentID := toString(body["agentId"])
+	id := m.nextID("ha")
+	rec := map[string]any{
+		"id":             id,
+		"customer":       customer,
+		"agentId":        agentID,
+		"identity":       "identity-" + id,
+		"runtimeAgentId": "rt-" + id,
+		"repoOwner":      "komodorio",
+		"repoName":       "agent-" + agentID,
+		"repoBranch":     "main",
+		"repoPath":       "/",
+		"status":         "deploying",
+		"createdAt":      mockTS,
+		"updatedAt":      mockTS,
+	}
+	m.hostedAgs[customer+"/"+agentID] = rec
+	writeJSON(w, http.StatusCreated, rec)
+}
+
+// deployWorkerCatalog simulates a catalog deploy: the server derives the customer
+// and assigns an agent_id when the client omits one, then returns a hosted agent
+// (which the resource then reads/deletes via the hosted-agents endpoints).
+func (m *mockServer) deployWorkerCatalog(w http.ResponseWriter, r *http.Request, catalogID string) {
+	body := decode(r)
+	agentID := toString(body["agentId"])
+	if agentID == "" {
+		agentID = "deployed-" + catalogID
+	}
+	customer := "acme" // server-derived from the account
 	id := m.nextID("ha")
 	rec := map[string]any{
 		"id":             id,
