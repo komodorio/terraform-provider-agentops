@@ -74,11 +74,19 @@ export AGENTOPS_ENDPOINT="https://staging.agentops.komodor.com" # optional
 | Resource    | `agentops_mcp_gateway_server`     | Upstream MCP server registered on the gateway     |
 | Resource    | `agentops_mcp_gateway_group`      | Group of MCP gateway servers                      |
 | Resource    | `agentops_mcp_gateway_policy`     | MCP gateway access policy                         |
+| Resource    | `agentops_incident_pipeline`      | Incident pipeline routing inbound alerts to an agent |
+| Resource    | `agentops_review_workflow`        | Code-review workflow running reviewer agents on PRs |
+| Resource    | `agentops_grader_config`          | Grader config that scores a sample of agent runs  |
+| Resource    | `agentops_channel`                | Notification channel to an external destination   |
+| Resource    | `agentops_channel_route`          | Route forwarding matching channel events to a target |
+| Resource    | `agentops_hosted_agent`           | Komodor-hosted managed agent deployment           |
+| Resource    | `agentops_worker_catalog_deployment` | Deploys a curated worker from the worker catalog |
 | Data source | `agentops_integration_catalog`    | Integration providers available to the account    |
 | Data source | `agentops_capabilities`           | Authorization capabilities                        |
 | Data source | `agentops_resource_types`         | Authorization resource types                      |
 | Data source | `agentops_worker_catalog`         | Deployable worker/agent templates                 |
-| Data source | `agentops_skills`                 | Skills available to agents                        |
+| Data source | `agentops_skills`                 | Skills available to agents                         |
+| Data source | `agentops_reviewers`              | Reviewer agents available to the account          |
 
 More resources are added over time. See [`docs/`](./docs) for the full,
 generated reference and [`examples/`](./examples) for usage examples.
