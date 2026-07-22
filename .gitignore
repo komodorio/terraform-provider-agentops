@@ -39,3 +39,17 @@ website/vendor
 
 # Local Terraform CLI config for dev_overrides when testing examples.
 dev.tfrc
+
+# Terraform variable files often contain secrets.
+*.tfvars
+*.tfvars.json
+*.auto.tfvars
+*.auto.tfvars.json
+
+# All state files (any name / any dir), not just the default.
+*.tfstate
+*.tfstate.*
+
+# Local env / secrets.
+.env
+.env.*
