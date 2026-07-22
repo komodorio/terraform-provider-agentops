@@ -456,6 +456,19 @@ func (r *incidentPipelineResource) Delete(ctx context.Context, req resource.Dele
 		return
 	}
 
+	// An active pipeline cannot be deleted; the API requires it to be paused first.
+	if state.Status.ValueString() == "active" {
+		paused, err := r.client.Gen.IncidentPipelinesPauseIncidentPipelineEndpointWithResponse(ctx, state.ID.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Error pausing incident pipeline before delete", err.Error())
+			return
+		}
+		if err := client.Check(paused.HTTPResponse, paused.Body); err != nil && !client.IsNotFound(err) {
+			resp.Diagnostics.AddError("Error pausing incident pipeline before delete", err.Error())
+			return
+		}
+	}
+
 	apiResp, err := r.client.Gen.IncidentPipelinesDeleteIncidentPipelineEndpointWithResponse(ctx, state.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Error deleting incident pipeline", err.Error())
