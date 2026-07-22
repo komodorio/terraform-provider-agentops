@@ -71,13 +71,8 @@ output "how_to_test" {
        Expect HTTP 202. If you get 401, the token is wrong; if 202 but no
        incident, the labels didn't match the routing rule.
 
-    3. Verify the incident was created and the orchestrator was dispatched
-       (needs your control-plane API key, not the webhook token):
-
-         curl -sS "$AGENTOPS_ENDPOINT/api/v1/incidents" \
-           -H "Authorization: Bearer $AGENTOPS_API_KEY" | jq '.[0]'
-
-       A populated "orchestrator_run_id" means the run was dispatched.
+    3. Open /incidents in the AgentOps UI and check that the incident appears
+       and moves through its status as the orchestrator runs.
     ────────────────────────────────────────────────────────────────────────────
   EOT
 }
