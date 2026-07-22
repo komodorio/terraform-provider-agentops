@@ -319,6 +319,18 @@ func (r *incidentPipelineResource) Create(ctx context.Context, req resource.Crea
 	desired := statusTarget(plan.Status)
 	detail := apiResp.JSON201
 
+	// The pipeline now exists server-side (as `draft`). Persist state immediately so a
+	// failure in the endpoint-linking or activation steps below still leaves the
+	// resource tracked and destroyable, rather than orphaning it on the server.
+	if diags := incidentPipelineApply(ctx, &plan, detail); diags.HasError() {
+		resp.Diagnostics.Append(diags...)
+		return
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	// The create endpoint does not accept a trigger (endpoint); link it via update so
 	// the pipeline can be activated — activation requires a linked endpoint.
 	if v := plan.TriggerID; !v.IsNull() && !v.IsUnknown() && v.ValueString() != "" {
@@ -334,6 +346,14 @@ func (r *incidentPipelineResource) Create(ctx context.Context, req resource.Crea
 		}
 		if linked.JSON200 != nil {
 			detail = linked.JSON200
+			if diags := incidentPipelineApply(ctx, &plan, detail); diags.HasError() {
+				resp.Diagnostics.Append(diags...)
+				return
+			}
+			resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+			if resp.Diagnostics.HasError() {
+				return
+			}
 		}
 	}
 
@@ -598,7 +618,11 @@ func incidentPipelineApply(ctx context.Context, m *incidentPipelineResourceModel
 		Severity:            ptrToString(d.RoutingRule.Severity),
 		Tags:                types.MapNull(types.StringType),
 	}
-	if d.RoutingRule.Tags != nil {
+	// Only populate tags when the server returns a non-empty map. `tags` is optional
+	// (not computed), so an omitted config leaves the planned value null; the API echoes
+	// back an empty map, which we normalize back to null to avoid a "provider produced
+	// inconsistent result after apply" (was null, now empty map) error.
+	if d.RoutingRule.Tags != nil && len(*d.RoutingRule.Tags) > 0 {
 		tags, dg := types.MapValueFrom(ctx, types.StringType, *d.RoutingRule.Tags)
 		diags.Append(dg...)
 		rule.Tags = tags

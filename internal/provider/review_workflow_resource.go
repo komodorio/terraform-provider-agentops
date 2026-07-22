@@ -235,6 +235,19 @@ func (r *reviewWorkflowResource) Create(ctx context.Context, req resource.Create
 	}
 
 	desired := statusTarget(plan.Status)
+
+	// The review workflow now exists server-side. Persist state before reconciling status
+	// so a failed activate/pause still leaves the workflow tracked and destroyable rather
+	// than orphaned on the server.
+	if diags := reviewWorkflowApply(ctx, &plan, apiResp.JSON201); diags.HasError() {
+		resp.Diagnostics.Append(diags...)
+		return
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	detail := r.reconcileStatus(ctx, apiResp.JSON201.Id, desired, apiResp.JSON201, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
