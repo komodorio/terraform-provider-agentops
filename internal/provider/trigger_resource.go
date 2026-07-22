@@ -73,14 +73,17 @@ func (r *triggerResource) Schema(ctx context.Context, req resource.SchemaRequest
 				Optional:            true,
 			},
 			"target_id": schema.StringAttribute{
-				MarkdownDescription: "ID of the agent or workflow this trigger invokes. Changing this forces a new trigger.",
-				Required:            true,
-				PlanModifiers:       []planmodifier.String{stringplanmodifier.RequiresReplace()},
+				MarkdownDescription: "ID of the agent or workflow this trigger invokes. Omit (together with " +
+					"`target_type`) to create a standalone webhook endpoint with no target — e.g. an endpoint an " +
+					"incident pipeline consumes. Changing this forces a new trigger.",
+				Optional:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"target_type": schema.StringAttribute{
-				MarkdownDescription: "Kind of target (e.g. `agent`, `workflow`). Changing this forces a new trigger.",
-				Required:            true,
-				PlanModifiers:       []planmodifier.String{stringplanmodifier.RequiresReplace()},
+				MarkdownDescription: "Kind of target (e.g. `agent`, `workflow`). Omit together with `target_id` for " +
+					"a standalone webhook endpoint. Changing this forces a new trigger.",
+				Optional:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"webhook_type": schema.StringAttribute{
 				MarkdownDescription: "Webhook payload type. Defaults to the server's choice when omitted.",
@@ -141,7 +144,6 @@ func (r *triggerResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
-	targetType := gen.TriggerTargetType(plan.TargetType.ValueString())
 	body := gen.CreateWebhookTriggerRequest{
 		Name:                stringToPtr(plan.Name),
 		Description:         stringToPtr(plan.Description),
@@ -149,8 +151,12 @@ func (r *triggerResource) Create(ctx context.Context, req resource.CreateRequest
 		IsEnabled:           boolToPtr(plan.IsEnabled),
 		SigningCredentialId: stringToPtr(plan.SigningCredentialID),
 		SigningSecret:       stringToPtr(plan.SigningSecret),
-		TargetId:            plan.TargetID.ValueStringPointer(),
-		TargetType:          &targetType,
+	}
+	// target_id/target_type go together and are omitted for a standalone endpoint.
+	if !plan.TargetType.IsNull() && !plan.TargetType.IsUnknown() && plan.TargetType.ValueString() != "" {
+		targetType := gen.TriggerTargetType(plan.TargetType.ValueString())
+		body.TargetType = &targetType
+		body.TargetId = stringToPtr(plan.TargetID)
 	}
 	if !plan.WebhookType.IsNull() && !plan.WebhookType.IsUnknown() {
 		wt := gen.CreateWebhookTriggerRequestWebhookType(plan.WebhookType.ValueString())

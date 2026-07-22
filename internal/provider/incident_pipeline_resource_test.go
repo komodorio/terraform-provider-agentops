@@ -51,6 +51,56 @@ func TestAccIncidentPipelineResource(t *testing.T) {
 	})
 }
 
+// TestAccIncidentPipelineResource_withEndpoint covers creating a standalone
+// webhook endpoint (an agentops_trigger with no target) and linking it into the
+// pipeline via trigger_id so the pipeline can be activated in a single apply —
+// the create endpoint does not accept a trigger, so the provider links it via
+// update before activating.
+func TestAccIncidentPipelineResource_withEndpoint(t *testing.T) {
+	mock := newMockServer(t)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: mockProviderConfig(mock.URL) + `
+resource "agentops_trigger" "endpoint" {
+  name = "incident-alerts"
+}
+
+resource "agentops_incident_pipeline" "with_endpoint" {
+  name       = "prod-incidents-ep"
+  status     = "active"
+  trigger_id = agentops_trigger.endpoint.id
+
+  alert_source = {
+    provider     = "generic"
+    monitor_mode = "create_catchall"
+  }
+
+  routing_rule = {
+    route_all = true
+  }
+
+  orchestrator_binding = {
+    agent_id = "agent_orch"
+  }
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					// Standalone endpoint: created with no target.
+					resource.TestCheckResourceAttrSet("agentops_trigger.endpoint", "id"),
+					resource.TestCheckResourceAttrSet("agentops_trigger.endpoint", "token"),
+					// The pipeline links the endpoint and activates.
+					resource.TestCheckResourceAttrPair("agentops_incident_pipeline.with_endpoint", "trigger_id", "agentops_trigger.endpoint", "id"),
+					resource.TestCheckResourceAttr("agentops_incident_pipeline.with_endpoint", "status", "active"),
+				),
+			},
+		},
+	})
+}
+
 func testAccIncidentPipelineConfig(endpoint, status string) string {
 	return mockProviderConfig(endpoint) + fmt.Sprintf(`
 resource "agentops_incident_pipeline" "test" {

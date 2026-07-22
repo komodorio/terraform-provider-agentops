@@ -51,10 +51,19 @@ resource "agentops_hosted_agent" "net_specialist" {
   model          = "claude-sonnet-5"
 }
 
+# ── Webhook endpoint that feeds alerts into the pipeline ─────────────────────
+# A standalone webhook trigger (no target); the pipeline consumes it via
+# trigger_id. An endpoint must be linked before the pipeline can be activated.
+resource "agentops_trigger" "incidents_endpoint" {
+  name        = "incident-alerts"
+  description = "Inbound alert webhook for the production incident pipeline"
+}
+
 # ── Pipeline wiring the agents together ──────────────────────────────────────
 resource "agentops_incident_pipeline" "prod" {
-  name   = "production-incidents"
-  status = "active"
+  name       = "production-incidents"
+  status     = "active"
+  trigger_id = agentops_trigger.incidents_endpoint.id
 
   alert_source = {
     provider     = "generic"
