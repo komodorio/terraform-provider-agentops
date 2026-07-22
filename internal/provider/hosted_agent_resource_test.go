@@ -42,8 +42,9 @@ func TestAccHostedAgentResource(t *testing.T) {
 				// cannot be verified on import.
 				ImportStateVerifyIgnore: []string{
 					"instructions", "credential_ref", "model", "display_name",
-					"replica_count", "commit_message", "mcp_group_id",
+					"commit_message", "mcp_group_id",
 					"capabilities", "skills", "mcp_servers", "image",
+					"wait_for_online", "wait_timeout",
 				},
 				ImportStateIdFunc: func(s *terraform.State) (string, error) {
 					rs := s.RootModule().Resources["agentops_hosted_agent.test"]
