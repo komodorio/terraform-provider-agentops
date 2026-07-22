@@ -101,11 +101,74 @@ resource "agentops_incident_pipeline" "with_endpoint" {
 	})
 }
 
+// TestAccIncidentPipelineResource_configChangeForcesReplace verifies that changing a
+// config-bearing attribute on a published (active) pipeline forces replacement rather than
+// an in-place update. The API only accepts config updates while a pipeline is draft, so an
+// in-place PATCH of an active pipeline would fail (the mock rejects it); a successful apply
+// proves the change went through destroy+recreate.
+func TestAccIncidentPipelineResource_configChangeForcesReplace(t *testing.T) {
+	mock := newMockServer(t)
+
+	config := func(env string) string {
+		return mockProviderConfig(mock.URL) + fmt.Sprintf(`
+resource "agentops_trigger" "endpoint" {
+  name = "incident-alerts"
+}
+
+resource "agentops_incident_pipeline" "repl" {
+  name       = "prod-incidents-repl"
+  status     = "active"
+  trigger_id = agentops_trigger.endpoint.id
+
+  alert_source = {
+    provider     = "generic"
+    monitor_mode = "create_catchall"
+  }
+
+  routing_rule = {
+    environment = %q
+  }
+
+  orchestrator_binding = {
+    agent_id = "agent_orch"
+  }
+}
+`, env)
+	}
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config("production"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("agentops_incident_pipeline.repl", "status", "active"),
+					resource.TestCheckResourceAttr("agentops_incident_pipeline.repl", "routing_rule.environment", "production"),
+				),
+			},
+			{
+				// Changing routing_rule on the active pipeline must recreate it and re-activate.
+				Config: config("staging"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("agentops_incident_pipeline.repl", "status", "active"),
+					resource.TestCheckResourceAttr("agentops_incident_pipeline.repl", "routing_rule.environment", "staging"),
+				),
+			},
+		},
+	})
+}
+
 func testAccIncidentPipelineConfig(endpoint, status string) string {
 	return mockProviderConfig(endpoint) + fmt.Sprintf(`
+resource "agentops_trigger" "endpoint" {
+  name = "incident-alerts"
+}
+
 resource "agentops_incident_pipeline" "test" {
-  name   = "prod-incidents"
-  status = %q
+  name       = "prod-incidents"
+  status     = %q
+  trigger_id = agentops_trigger.endpoint.id
 
   alert_source = {
     provider     = "datadog"

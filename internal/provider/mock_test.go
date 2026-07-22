@@ -687,6 +687,11 @@ func (m *mockServer) incidentPipelineByID(w http.ResponseWriter, r *http.Request
 	case http.MethodGet:
 		writeJSON(w, http.StatusOK, rec)
 	case http.MethodPatch:
+		// The real API only allows updating a pipeline while it is `draft`.
+		if status, _ := rec["status"].(string); status != "draft" {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "Only draft pipelines can be updated. Pause the pipeline first."})
+			return
+		}
 		for k, v := range decode(r) {
 			if v != nil {
 				rec[k] = v
@@ -696,6 +701,11 @@ func (m *mockServer) incidentPipelineByID(w http.ResponseWriter, r *http.Request
 		m.incidentPls[id] = rec
 		writeJSON(w, http.StatusOK, rec)
 	case http.MethodDelete:
+		// The real API refuses to delete an active pipeline; it must be paused first.
+		if status, _ := rec["status"].(string); status == "active" {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "Pause the pipeline before deleting it."})
+			return
+		}
 		delete(m.incidentPls, id)
 		w.WriteHeader(http.StatusNoContent)
 	default:
@@ -710,6 +720,11 @@ func (m *mockServer) incidentPipelineAction(w http.ResponseWriter, id, action st
 		return
 	}
 	if action == "activate" {
+		// The real API refuses to activate a pipeline with no linked endpoint.
+		if tid, _ := rec["trigger_id"].(string); tid == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "Link an endpoint before activating. Pick one in the workflow wizard."})
+			return
+		}
 		rec["status"] = "active"
 	} else {
 		rec["status"] = "paused"
