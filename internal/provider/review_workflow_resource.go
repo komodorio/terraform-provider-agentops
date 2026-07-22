@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -107,11 +108,15 @@ func (r *reviewWorkflowResource) Schema(ctx context.Context, req resource.Schema
 				Computed:            true,
 				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
+			// The API only allows updating a workflow while it is `draft`, and a published
+			// (active/paused) workflow never returns to draft — so every config-bearing
+			// attribute forces replacement. Only `status` changes in place (via the
+			// activate/pause endpoints).
 			"name": schema.StringAttribute{
-				MarkdownDescription: "Human-readable workflow name. Server-assigned when omitted.",
+				MarkdownDescription: "Human-readable workflow name. Server-assigned when omitted. Changing it forces a new workflow.",
 				Optional:            true,
 				Computed:            true,
-				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown(), stringplanmodifier.RequiresReplace()},
 			},
 			"status": schema.StringAttribute{
 				MarkdownDescription: "Lifecycle status. Newly created workflows start as `draft`; set to " +
@@ -121,17 +126,20 @@ func (r *reviewWorkflowResource) Schema(ctx context.Context, req resource.Schema
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"base_branch_filter": schema.StringAttribute{
-				MarkdownDescription: "Only review pull requests targeting this base branch. Reviews all branches when omitted.",
+				MarkdownDescription: "Only review pull requests targeting this base branch. Reviews all branches when omitted. Changing it forces a new workflow.",
 				Optional:            true,
+				PlanModifiers:       []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"reviewer_agent_ids": schema.ListAttribute{
-				MarkdownDescription: "IDs of the reviewer agents that run against matching pull requests.",
+				MarkdownDescription: "IDs of the reviewer agents that run against matching pull requests. Changing them forces a new workflow.",
 				ElementType:         types.StringType,
 				Required:            true,
+				PlanModifiers:       []planmodifier.List{listplanmodifier.RequiresReplace()},
 			},
 			"repos": schema.ListNestedAttribute{
-				MarkdownDescription: "GitHub repositories this workflow reviews.",
+				MarkdownDescription: "GitHub repositories this workflow reviews. Changing them forces a new workflow.",
 				Optional:            true,
+				PlanModifiers:       []planmodifier.List{listplanmodifier.RequiresReplace()},
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"repo_owner": schema.StringAttribute{
@@ -299,27 +307,21 @@ func (r *reviewWorkflowResource) Update(ctx context.Context, req resource.Update
 		return
 	}
 
-	body := gen.UpdateReviewWorkflowRequest{
-		Name:             stringToPtr(plan.Name),
-		BaseBranchFilter: stringToPtr(plan.BaseBranchFilter),
-		Repos:            reviewWorkflowReposToAPI(plan.Repos),
-	}
-	resp.Diagnostics.Append(listToStringSlice(ctx, plan.ReviewerAgentIDs, &body.ReviewerAgentIds)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	apiResp, err := r.client.Gen.ReviewWorkflowsUpdateReviewWorkflowEndpointWithResponse(ctx, plan.ID.ValueString(), body)
+	// Every config-bearing attribute forces replacement (see the schema), because the API
+	// only accepts config updates while a workflow is `draft` and a published workflow never
+	// returns to draft. So the only in-place change that reaches Update is a `status`
+	// transition, driven via the activate/pause endpoints — no PATCH here.
+	apiResp, err := r.client.Gen.ReviewWorkflowsGetReviewWorkflowEndpointWithResponse(ctx, plan.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Error updating review workflow", err.Error())
+		resp.Diagnostics.AddError("Error reading review workflow", err.Error())
 		return
 	}
 	if err := client.Check(apiResp.HTTPResponse, apiResp.Body); err != nil {
-		resp.Diagnostics.AddError("Error updating review workflow", err.Error())
+		resp.Diagnostics.AddError("Error reading review workflow", err.Error())
 		return
 	}
 	if apiResp.JSON200 == nil {
-		resp.Diagnostics.AddError("Error updating review workflow", "API returned an empty body")
+		resp.Diagnostics.AddError("Error reading review workflow", "API returned an empty body")
 		return
 	}
 
@@ -341,6 +343,19 @@ func (r *reviewWorkflowResource) Delete(ctx context.Context, req resource.Delete
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	// An active workflow cannot be deleted; the API requires it to be paused first.
+	if state.Status.ValueString() == "active" {
+		paused, err := r.client.Gen.ReviewWorkflowsPauseReviewWorkflowEndpointWithResponse(ctx, state.ID.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Error pausing review workflow before delete", err.Error())
+			return
+		}
+		if err := client.Check(paused.HTTPResponse, paused.Body); err != nil && !client.IsNotFound(err) {
+			resp.Diagnostics.AddError("Error pausing review workflow before delete", err.Error())
+			return
+		}
 	}
 
 	apiResp, err := r.client.Gen.ReviewWorkflowsDeleteReviewWorkflowEndpointWithResponse(ctx, state.ID.ValueString())

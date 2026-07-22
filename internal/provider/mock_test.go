@@ -780,6 +780,11 @@ func (m *mockServer) reviewWorkflowByID(w http.ResponseWriter, r *http.Request, 
 	case http.MethodGet:
 		writeJSON(w, http.StatusOK, rec)
 	case http.MethodPatch:
+		// The real API only allows updating a workflow while it is `draft`.
+		if status, _ := rec["status"].(string); status != "draft" {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "Only draft workflows can be updated. Pause the workflow first."})
+			return
+		}
 		for k, v := range decode(r) {
 			if v != nil {
 				rec[k] = v
@@ -790,6 +795,11 @@ func (m *mockServer) reviewWorkflowByID(w http.ResponseWriter, r *http.Request, 
 		m.reviewWfs[id] = rec
 		writeJSON(w, http.StatusOK, rec)
 	case http.MethodDelete:
+		// The real API refuses to delete an active workflow; it must be paused first.
+		if status, _ := rec["status"].(string); status == "active" {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "Pause the workflow before deleting it."})
+			return
+		}
 		delete(m.reviewWfs, id)
 		w.WriteHeader(http.StatusNoContent)
 	default:
