@@ -36,3 +36,6 @@ website/vendor
 
 # Down-converted spec produced transiently by `make generate`.
 /api/openapi.gen.json
+
+# Local Terraform CLI config for dev_overrides when testing examples.
+dev.tfrc
