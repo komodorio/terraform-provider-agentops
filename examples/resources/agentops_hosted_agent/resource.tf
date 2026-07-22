@@ -4,7 +4,6 @@ resource "agentops_hosted_agent" "triage" {
   instructions   = "Triage incoming production alerts and page the on-call when severity is high."
   credential_ref = "cred_01hxyz"
   model          = "claude-sonnet-5"
-  replica_count  = 2
 
   skills = [
     {

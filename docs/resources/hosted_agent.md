@@ -54,8 +54,9 @@ resource "agentops_hosted_agent" "triage" {
 - `mcp_group_id` (String) ID of an MCP gateway group to attach. Write-only.
 - `mcp_servers` (Attributes List) Named MCP servers the agent can reach. Write-only. (see [below for nested schema](#nestedatt--mcp_servers))
 - `model` (String) Model the agent uses. Write-only.
-- `replica_count` (Number) Number of agent replicas to run. Write-only.
 - `skills` (Attributes List) Skills bundled into the agent. Write-only. (see [below for nested schema](#nestedatt--skills))
+- `wait_for_online` (Boolean) Whether create/update should block until the hosted agent reports `online` (its first heartbeat). Defaults to `true`. Set to `false` to return as soon as the deployment is accepted — useful for agents that are intentionally left in `draft`/scaled to zero and will never heartbeat. Note: a failed cluster-side provision is not reported back as `deploy_failed` for API-created agents, so a failure surfaces as a `wait_timeout` rather than an immediate error.
+- `wait_timeout` (String) Maximum time to wait for the agent to become `online`, as a Go duration (e.g. `10m`, `90s`). Defaults to `10m`. Only used when `wait_for_online` is `true`.
 
 ### Read-Only
 

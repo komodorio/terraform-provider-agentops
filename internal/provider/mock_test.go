@@ -1025,6 +1025,12 @@ func (m *mockServer) hostedAgentByPath(w http.ResponseWriter, r *http.Request, c
 	}
 	switch r.Method {
 	case http.MethodGet:
+		// Simulate provisioning completing: an agent created as "deploying"
+		// reports "online" once polled, so wait_for_online terminates.
+		if rec["status"] == "deploying" {
+			rec["status"] = "online"
+			m.hostedAgs[key] = rec
+		}
 		writeJSON(w, http.StatusOK, rec)
 	case http.MethodPut:
 		_ = decode(r) // spec fields are not echoed back
