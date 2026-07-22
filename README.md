@@ -1,10 +1,15 @@
 # Komodor AgentOps Terraform Provider
 
+[![Terraform Registry](https://img.shields.io/badge/Terraform%20Registry-komodorio%2Fagentops-844FBA?logo=terraform&logoColor=white)](https://registry.terraform.io/providers/komodorio/agentops/latest)
+[![Latest Release](https://img.shields.io/github/v/release/komodorio/terraform-provider-agentops?label=release&logo=github)](https://github.com/komodorio/terraform-provider-agentops/releases/latest)
+[![Tests](https://github.com/komodorio/terraform-provider-agentops/actions/workflows/test.yml/badge.svg)](https://github.com/komodorio/terraform-provider-agentops/actions/workflows/test.yml)
+
 Manage [Komodor AgentOps](https://agentops.komodor.com) config-plane resources as
 code. The provider talks to the AgentOps control-plane API and is built on the
 [Terraform Plugin Framework](https://github.com/hashicorp/terraform-plugin-framework).
 
-Provider address: `registry.terraform.io/komodorio/agentops`.
+Available on the [Terraform Registry](https://registry.terraform.io/providers/komodorio/agentops)
+as `komodorio/agentops`.
 
 ## Requirements
 
