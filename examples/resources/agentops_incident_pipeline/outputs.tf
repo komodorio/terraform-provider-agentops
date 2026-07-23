@@ -5,7 +5,7 @@
 
 output "incident_webhook_url" {
   description = "Endpoint to POST alerts to. Feeds the active incident pipeline."
-  value       = agentops_incident_pipeline.prod.webhook_url
+  value       = agentops_incident_pipeline.incidents.webhook_url
 }
 
 output "incident_webhook_token" {
@@ -16,7 +16,7 @@ output "incident_webhook_token" {
 
 output "incident_pipeline_id" {
   description = "ID of the incident pipeline (use for imports or API calls)."
-  value       = agentops_incident_pipeline.prod.id
+  value       = agentops_incident_pipeline.incidents.id
 }
 
 output "incident_trigger_id" {
@@ -42,7 +42,7 @@ output "net_specialist_runtime_agent_id" {
 }
 
 # Printed after every successful apply: a copy-paste test that fires an alert
-# matching the routing rule (environment=production, severity=critical) so the
+# matching the routing rule (environment=staging, severity=critical) so the
 # pipeline creates an incident and dispatches the orchestrator.
 output "how_to_test" {
   description = "Steps to fire a test alert through the pipeline."
@@ -54,16 +54,16 @@ output "how_to_test" {
          TOKEN=$(terraform output -raw incident_webhook_token)
 
     2. Fire a test alert. The labels below match the pipeline's routing rule
-       (environment=production, severity=critical); use a fresh "fingerprint"
+       (environment=staging, severity=critical); use a fresh "fingerprint"
        each time — re-firing the same one updates the incident but does NOT
        dispatch a new orchestrator run:
 
-         curl -sS -X POST "${agentops_incident_pipeline.prod.webhook_url}" \
+         curl -sS -X POST "${agentops_incident_pipeline.incidents.webhook_url}" \
            -H "X-Webhook-Token: $TOKEN" \
            -H "Content-Type: application/json" \
            -d '{
              "status": "firing",
-             "labels": { "alertname": "HighErrorRate", "env": "production", "severity": "critical" },
+             "labels": { "alertname": "HighErrorRate", "env": "staging", "severity": "critical" },
              "annotations": { "description": "Error rate exceeded threshold on checkout-service" },
              "fingerprint": "test-'"$(date +%s)"'"
            }'

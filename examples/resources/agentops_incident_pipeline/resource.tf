@@ -41,12 +41,12 @@ resource "agentops_hosted_agent" "net_specialist" {
 # trigger_id. An endpoint must be linked before the pipeline can be activated.
 resource "agentops_trigger" "incidents_endpoint" {
   name        = "incident-alerts"
-  description = "Inbound alert webhook for the production incident pipeline"
+  description = "Inbound alert webhook for the staging incident pipeline"
 }
 
 # ── Pipeline wiring the agents together ──────────────────────────────────────
-resource "agentops_incident_pipeline" "prod" {
-  name       = "production-incidents"
+resource "agentops_incident_pipeline" "incidents" {
+  name       = "staging-incidents"
   status     = "active"
   trigger_id = agentops_trigger.incidents_endpoint.id
 
@@ -56,7 +56,7 @@ resource "agentops_incident_pipeline" "prod" {
   }
 
   routing_rule = {
-    environment = "production"
+    environment = "staging"
     severity    = "critical"
   }
 
