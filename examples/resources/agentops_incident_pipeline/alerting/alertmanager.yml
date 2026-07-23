@@ -1,0 +1,31 @@
+# Prometheus AlertManager → AgentOps incident pipeline.
+#
+# Routes critical/staging alerts to the webhook the Terraform example provisions.
+# Fill the three placeholders from the Terraform outputs:
+#   url         : terraform output -raw incident_webhook_url   (…/api/v1/webhooks/endpoint/<trigger_id>)
+#   credentials : terraform output -raw incident_webhook_token
+# The default trigger accepts the token via `Authorization: Bearer <token>` (used here) or an
+# `X-Webhook-Token` header. See ./README.md for the label contract (severity=critical, env=staging).
+
+route:
+  receiver: default
+  group_by: [alertname, env]
+  routes:
+    # Send only critical staging alerts to AgentOps.
+    - matchers:
+        - 'severity="critical"'
+        - 'env="staging"'
+      receiver: agentops-incidents
+      continue: true          # keep sending to any downstream receivers too
+
+receivers:
+  - name: default
+
+  - name: agentops-incidents
+    webhook_configs:
+      - url: https://<AGENTOPS_HOST>/api/v1/webhooks/endpoint/<TRIGGER_ID>
+        send_resolved: true   # resolved alerts are accepted and skipped by the pipeline
+        http_config:
+          authorization:
+            type: Bearer
+            credentials: <WEBHOOK_TOKEN>

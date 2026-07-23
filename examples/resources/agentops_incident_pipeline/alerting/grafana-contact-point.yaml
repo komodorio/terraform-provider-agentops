@@ -1,0 +1,34 @@
+# Grafana unified alerting → AgentOps incident pipeline (file-based provisioning).
+#
+# Drop into Grafana's provisioning/alerting/ directory (or apply via the API). Fill from the
+# Terraform outputs:
+#   url                       : terraform output -raw incident_webhook_url
+#   authorization_credentials : terraform output -raw incident_webhook_token
+# The default trigger accepts the token via `Authorization: Bearer <token>` (scheme below).
+# See ./README.md for the label contract (severity=critical, env=staging).
+
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: agentops-incidents
+    receivers:
+      - uid: agentops-incidents
+        type: webhook
+        settings:
+          url: https://<AGENTOPS_HOST>/api/v1/webhooks/endpoint/<TRIGGER_ID>
+          httpMethod: POST
+          authorization_scheme: Bearer
+          authorization_credentials: <WEBHOOK_TOKEN>
+
+# Route matching alerts to the contact point above. Adjust the parent policy to taste;
+# this nested policy forwards only critical staging alerts to AgentOps.
+policies:
+  - orgId: 1
+    receiver: default
+    routes:
+      - receiver: agentops-incidents
+        object_matchers:
+          - ['severity', '=', 'critical']
+          - ['env', '=', 'staging']
+        continue: true

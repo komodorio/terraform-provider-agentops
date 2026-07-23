@@ -96,6 +96,12 @@ export AGENTOPS_ENDPOINT="https://staging.agentops.komodor.com" # optional
 More resources are added over time. See [`docs/`](./docs) for the full,
 generated reference and [`examples/`](./examples) for usage examples.
 
+**Featured example — [incident pipeline](./examples/resources/agentops_incident_pipeline):**
+a self-contained, runnable Terraform stack that stands up a full incident-response pipeline
+(orchestrator + specialist agents + webhook trigger), with a guide for connecting Grafana or
+Prometheus AlertManager to the webhook under
+[`alerting/`](./examples/resources/agentops_incident_pipeline/alerting).
+
 ## Developing the Provider
 
 Requires [Go](https://golang.org/doc/install) >= 1.25.

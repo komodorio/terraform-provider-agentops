@@ -15,7 +15,7 @@ provider "agentops" {
 }
 
 variable "api_key" {
-  description = "AgentOps API key. Prefer the AGENTOPS_API_KEY environment variable."
+  description = "AgentOps API key (a PAT or Service Account token). Create one at agentops.komodor.com → Settings → API Key. Prefer the AGENTOPS_API_KEY environment variable."
   type        = string
   sensitive   = true
   default     = null
@@ -28,7 +28,7 @@ variable "endpoint" {
 }
 
 variable "specialist_llm_key" {
-  description = "LLM API key for the specialist agents. Must match the provider of their model (an Anthropic key for the claude-sonnet-5 model used below)."
+  description = "LLM API key for the specialist agents. Must match the provider of their `model` — an Anthropic key for the default claude-sonnet-5. Using a different provider? Set `model` on the specialists accordingly and pass that provider's key here. Reusing agents you already have deployed? You don't need this — bind their runtime_agent_ids in specialist_bindings instead (see the README)."
   type        = string
   sensitive   = true
 }
