@@ -64,6 +64,7 @@ type hostedAgentResourceModel struct {
 	McpGroupID    types.String            `tfsdk:"mcp_group_id"`
 	Capabilities  types.Map               `tfsdk:"capabilities"`
 	Skills        []hostedAgentSkillModel `tfsdk:"skills"`
+	Agents        []hostedAgentAgentModel `tfsdk:"agents"`
 	McpServers    []hostedAgentMcpModel   `tfsdk:"mcp_servers"`
 	Image         *hostedAgentImageModel  `tfsdk:"image"`
 	WaitForOnline types.Bool              `tfsdk:"wait_for_online"`
@@ -83,6 +84,11 @@ type hostedAgentResourceModel struct {
 }
 
 type hostedAgentSkillModel struct {
+	ID      types.String `tfsdk:"id"`
+	Content types.String `tfsdk:"content"`
+}
+
+type hostedAgentAgentModel struct {
 	ID      types.String `tfsdk:"id"`
 	Content types.String `tfsdk:"content"`
 }
@@ -161,6 +167,16 @@ func (r *hostedAgentResource) Schema(ctx context.Context, req resource.SchemaReq
 					Attributes: map[string]schema.Attribute{
 						"id":      schema.StringAttribute{Required: true, MarkdownDescription: "Skill identifier."},
 						"content": schema.StringAttribute{Required: true, MarkdownDescription: "Skill content."},
+					},
+				},
+			},
+			"agents": schema.ListNestedAttribute{
+				MarkdownDescription: "Subagents bundled into the agent. Write-only.",
+				Optional:            true,
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"id":      schema.StringAttribute{Required: true, MarkdownDescription: "Subagent identifier."},
+						"content": schema.StringAttribute{Required: true, MarkdownDescription: "Subagent content."},
 					},
 				},
 			},
@@ -274,6 +290,7 @@ func (r *hostedAgentResource) Create(ctx context.Context, req resource.CreateReq
 		CommitMessage: stringToPtr(plan.CommitMessage),
 		McpGroupId:    stringToPtr(plan.McpGroupID),
 		Skills:        hostedAgentSkillsToAPI(plan.Skills),
+		Agents:        hostedAgentAgentsToAPI(plan.Agents),
 		McpServers:    hostedAgentMcpToAPI(plan.McpServers),
 		Image:         hostedAgentImageToAPI(plan.Image),
 	}
@@ -349,6 +366,7 @@ func (r *hostedAgentResource) Update(ctx context.Context, req resource.UpdateReq
 		DisplayName:   stringToPtr(plan.DisplayName),
 		CommitMessage: stringToPtr(plan.CommitMessage),
 		Skills:        hostedAgentSkillsToAPI(plan.Skills),
+		Agents:        hostedAgentAgentsToAPI(plan.Agents),
 		McpServers:    hostedAgentMcpToAPI(plan.McpServers),
 		Image:         hostedAgentImageToAPI(plan.Image),
 	}
@@ -416,6 +434,17 @@ func hostedAgentSkillsToAPI(items []hostedAgentSkillModel) *[]gen.HostedAgentSki
 	out := make([]gen.HostedAgentSkill, 0, len(items))
 	for _, s := range items {
 		out = append(out, gen.HostedAgentSkill{Id: s.ID.ValueString(), Content: s.Content.ValueString()})
+	}
+	return &out
+}
+
+func hostedAgentAgentsToAPI(items []hostedAgentAgentModel) *[]gen.HostedAgentAgent {
+	if items == nil {
+		return nil
+	}
+	out := make([]gen.HostedAgentAgent, 0, len(items))
+	for _, a := range items {
+		out = append(out, gen.HostedAgentAgent{Id: a.ID.ValueString(), Content: a.Content.ValueString()})
 	}
 	return &out
 }
