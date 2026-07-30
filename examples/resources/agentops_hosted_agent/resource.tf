@@ -12,6 +12,21 @@ resource "agentops_hosted_agent" "triage" {
     },
   ]
 
+  agents = [
+    {
+      id      = "failure-waste"
+      content = file("${path.module}/agents/failure-waste.md")
+    },
+    {
+      id      = "metering-coverage"
+      content = file("${path.module}/agents/metering-coverage.md")
+    },
+    {
+      id      = "model-fit"
+      content = file("${path.module}/agents/model-fit.md")
+    },
+  ]
+
   image = {
     repository = "komodorio/hosted-agent"
     tag        = "v1.4.2"

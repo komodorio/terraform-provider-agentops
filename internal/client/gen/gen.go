@@ -3410,9 +3410,16 @@ type HeartbeatResponse struct {
 // HeartbeatResponseStatus defines model for HeartbeatResponse.Status.
 type HeartbeatResponseStatus string
 
+// HostedAgentAgent defines model for HostedAgentAgent.
+type HostedAgentAgent struct {
+	Content string `json:"content"`
+	Id      string `json:"id"`
+}
+
 // HostedAgentCreateRequest defines model for HostedAgentCreateRequest.
 type HostedAgentCreateRequest struct {
 	AgentId       string                  `json:"agentId"`
+	Agents        *[]HostedAgentAgent     `json:"agents,omitempty"`
 	Capabilities  *map[string]bool        `json:"capabilities,omitempty"`
 	CommitMessage *string                 `json:"commitMessage,omitempty"`
 	CredentialRef string                  `json:"credentialRef"`
@@ -3471,6 +3478,7 @@ type HostedAgentSkill struct {
 
 // HostedAgentUpdateRequest defines model for HostedAgentUpdateRequest.
 type HostedAgentUpdateRequest struct {
+	Agents        *[]HostedAgentAgent     `json:"agents,omitempty"`
 	Capabilities  *map[string]bool        `json:"capabilities,omitempty"`
 	CommitMessage *string                 `json:"commitMessage,omitempty"`
 	CredentialRef *string                 `json:"credentialRef,omitempty"`

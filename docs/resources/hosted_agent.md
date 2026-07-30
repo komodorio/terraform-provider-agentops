@@ -27,6 +27,21 @@ resource "agentops_hosted_agent" "triage" {
     },
   ]
 
+  agents = [
+    {
+      id      = "failure-waste"
+      content = file("${path.module}/agents/failure-waste.md")
+    },
+    {
+      id      = "metering-coverage"
+      content = file("${path.module}/agents/metering-coverage.md")
+    },
+    {
+      id      = "model-fit"
+      content = file("${path.module}/agents/model-fit.md")
+    },
+  ]
+
   image = {
     repository = "komodorio/hosted-agent"
     tag        = "v1.4.2"
@@ -45,6 +60,7 @@ resource "agentops_hosted_agent" "triage" {
 
 ### Optional
 
+- `agents` (Attributes List) Subagents bundled into the agent. Write-only. (see [below for nested schema](#nestedatt--agents))
 - `capabilities` (Map of Boolean) Capability toggles for the agent. Write-only.
 - `commit_message` (String) Commit message recorded when the agent's generated repo is updated. Write-only.
 - `customer` (String) Customer/tenant the agent is hosted for. Optional: the server derives it from your account when omitted. Changing this forces a new hosted agent.
@@ -71,6 +87,15 @@ resource "agentops_hosted_agent" "triage" {
 - `status` (String) Deployment status (`online`, `offline`, `draft`, `deploying`, `deploy_failed`).
 - `updated_at` (String) Last-update timestamp.
 - `values` (String) Resolved deployment values, as a JSON object.
+
+<a id="nestedatt--agents"></a>
+### Nested Schema for `agents`
+
+Required:
+
+- `content` (String) Subagent content.
+- `id` (String) Subagent identifier.
+
 
 <a id="nestedatt--image"></a>
 ### Nested Schema for `image`

@@ -5940,12 +5940,38 @@
         "title": "HeartbeatResponse",
         "type": "object"
       },
+      "HostedAgentAgent": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "content"
+        ],
+        "title": "HostedAgentAgent",
+        "type": "object"
+      },
       "HostedAgentCreateRequest": {
         "additionalProperties": false,
         "properties": {
           "agentId": {
             "title": "Agentid",
             "type": "string"
+          },
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/HostedAgentAgent"
+            },
+            "title": "Agents",
+            "type": "array"
           },
           "capabilities": {
             "additionalProperties": {
@@ -6218,6 +6244,20 @@
       "HostedAgentUpdateRequest": {
         "additionalProperties": false,
         "properties": {
+          "agents": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/HostedAgentAgent"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agents"
+          },
           "capabilities": {
             "anyOf": [
               {
