@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
@@ -151,7 +152,7 @@ resource "agentops_hosted_agent" "agents" {
 // first poll, carrying the control plane's own reason.
 func TestAccHostedAgentResourceDeployFailed(t *testing.T) {
 	mock := newMockServer(t)
-	mock.deployFails = true
+	mock.tune(func(m *mockServer) { m.deployFails = true })
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
@@ -177,4 +178,31 @@ resource "agentops_hosted_agent" "failed" {
   wait_timeout   = "20s"
 }
 `
+}
+
+// TestAccHostedAgentResourceRuntimeRecordLags covers the other half of the deploy
+// check: the runtime record can 404 for a while after create, and that must not be
+// read as a failure. The hosted agent stays "deploying" for one poll so the runtime
+// record is actually consulted, and 404s on that poll.
+func TestAccHostedAgentResourceRuntimeRecordLags(t *testing.T) {
+	mock := newMockServer(t)
+	mock.tune(func(m *mockServer) {
+		m.hostedPollsDeploying = 1
+		m.runtimeNotFound = 1
+	})
+
+	previous := hostedAgentPollInterval
+	hostedAgentPollInterval = 10 * time.Millisecond
+	t.Cleanup(func() { hostedAgentPollInterval = previous })
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccHostedAgentConfig(mock.URL, "gpt-4o"),
+				Check:  resource.TestCheckResourceAttr("agentops_hosted_agent.test", "agent_id", "triage"),
+			},
+		},
+	})
 }

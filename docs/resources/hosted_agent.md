@@ -70,7 +70,7 @@ resource "agentops_hosted_agent" "triage" {
 - `mcp_servers` (Attributes List) Named MCP servers the agent can reach. Write-only. (see [below for nested schema](#nestedatt--mcp_servers))
 - `model` (String) Model the agent uses. Write-only.
 - `skills` (Attributes List) Skills bundled into the agent. Write-only. (see [below for nested schema](#nestedatt--skills))
-- `wait_for_online` (Boolean) Whether create/update should block until the hosted agent reports `online` (its first heartbeat). Defaults to `true`. Set to `false` to return as soon as the deployment is accepted — useful for agents that are intentionally left in `draft`/scaled to zero and will never heartbeat. A failed cluster-side provision ends the wait as soon as it is observed, reporting the control plane's own reason rather than running out the timeout.
+- `wait_for_online` (Boolean) Whether create/update should block until the hosted agent reports `online` (its first heartbeat). Defaults to `true`. Set to `false` to return as soon as the deployment is accepted — useful for agents that are intentionally left in `draft`/scaled to zero and will never heartbeat. While the agent is not yet online, a failed cluster-side provision ends the wait as soon as it is observed, reporting the control plane's own reason rather than running out the timeout. Updating an agent that is already online returns as soon as it reports `online`, which the revision already running does, so the new revision's rollout is not waited on.
 - `wait_timeout` (String) Maximum time to wait for the agent to become `online`, as a Go duration (e.g. `10m`, `90s`). Defaults to `10m`. Only used when `wait_for_online` is `true`.
 
 ### Read-Only

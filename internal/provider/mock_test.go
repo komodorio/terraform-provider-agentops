@@ -65,7 +65,13 @@ type mockServer struct {
 	// cluster-side provision: the hosted record stays "draft" (that record's status
 	// only ever tracks heartbeats) while the runtime agent record reports the failure.
 	deployFails bool
-	seq         int
+	// runtimeNotFound is how many runtime-agent reads 404 before the record appears,
+	// standing in for the runtime record lagging the hosted one after create.
+	runtimeNotFound int
+	// hostedPollsDeploying is how many GETs a hosted agent stays "deploying" before
+	// it comes online. Zero, the default, comes online on the first read.
+	hostedPollsDeploying int
+	seq                  int
 }
 
 var (
@@ -100,6 +106,14 @@ var (
 	runtimeAgentByIDRe    = regexp.MustCompile(`^/api/v1/agents/([^/]+)$`)
 	workerCatalogDeployRe = regexp.MustCompile(`^/api/v1/worker-catalog/([^/]+)/deploy$`)
 )
+
+// tune applies mock configuration under the lock every handler reads it with, so a
+// test can set up a server that is already serving traffic.
+func (m *mockServer) tune(fn func(*mockServer)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	fn(m)
+}
 
 func newMockServer(t *testing.T) *mockServer {
 	t.Helper()
@@ -1068,6 +1082,11 @@ func (m *mockServer) initialHostedStatus() string {
 // runtimeAgentByID serves the runtime agent record, the only one carrying the
 // deploy outcome.
 func (m *mockServer) runtimeAgentByID(w http.ResponseWriter, agentID string) {
+	if m.runtimeNotFound > 0 {
+		m.runtimeNotFound--
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "agent not found"})
+		return
+	}
 	rec := map[string]any{"agent_id": agentID, "status": "draft", "deploy_status": "in_progress"}
 	if m.deployFails {
 		rec["status"] = "deploy_failed"
@@ -1118,7 +1137,11 @@ func (m *mockServer) hostedAgentByPath(w http.ResponseWriter, r *http.Request, c
 		// Simulate provisioning completing: an agent created as "deploying"
 		// reports "online" once polled, so wait_for_online terminates.
 		if rec["status"] == "deploying" {
-			rec["status"] = "online"
+			if m.hostedPollsDeploying > 0 {
+				m.hostedPollsDeploying--
+			} else {
+				rec["status"] = "online"
+			}
 			m.hostedAgs[key] = rec
 		}
 		writeJSON(w, http.StatusOK, rec)

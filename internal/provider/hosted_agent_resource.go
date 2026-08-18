@@ -23,10 +23,12 @@ import (
 	"github.com/komodorio/terraform-provider-agentops/internal/client/gen"
 )
 
+// hostedAgentPollInterval is how often the provider re-reads a hosted agent while
+// waiting for it to become online. A var, not a const, so tests covering the poll
+// loop do not have to spend a real interval per iteration.
+var hostedAgentPollInterval = 5 * time.Second
+
 const (
-	// hostedAgentPollInterval is how often the provider re-reads a hosted agent
-	// while waiting for it to become online.
-	hostedAgentPollInterval = 5 * time.Second
 	// hostedAgentDefaultWaitTimeout is the default wait_timeout when the agent
 	// is waited on but no explicit timeout is configured.
 	hostedAgentDefaultWaitTimeout = 10 * time.Minute
@@ -207,8 +209,10 @@ func (r *hostedAgentResource) Schema(ctx context.Context, req resource.SchemaReq
 				MarkdownDescription: "Whether create/update should block until the hosted agent reports `online` " +
 					"(its first heartbeat). Defaults to `true`. Set to `false` to return as soon as the deployment " +
 					"is accepted — useful for agents that are intentionally left in `draft`/scaled to zero and will " +
-					"never heartbeat. A failed cluster-side provision ends the wait as soon as it is observed, " +
-					"reporting the control plane's own reason rather than running out the timeout.",
+					"never heartbeat. While the agent is not yet online, a failed cluster-side provision ends the " +
+					"wait as soon as it is observed, reporting the control plane's own reason rather than running " +
+					"out the timeout. Updating an agent that is already online returns as soon as it reports " +
+					"`online`, which the revision already running does, so the new revision's rollout is not waited on.",
 				Optional: true,
 			},
 			"wait_timeout": schema.StringAttribute{
@@ -540,6 +544,7 @@ func (r *hostedAgentResource) waitForOnlineIfRequested(ctx context.Context, plan
 func waitForHostedAgentOnline(ctx context.Context, cl *client.Client, customer, agentID string, timeout time.Duration) (*gen.HostedAgentResponse, error) {
 	deadline := time.Now().Add(timeout)
 	last, lastDeploy := "", ""
+	var lastDeployErr error
 	for {
 		apiResp, err := cl.Gen.HostedAgentsGetHostedAgentWithResponse(ctx, customer, agentID)
 		if err != nil {
@@ -564,7 +569,8 @@ func waitForHostedAgentOnline(ctx context.Context, cl *client.Client, customer, 
 			// provision that never produced a worker reads as "draft" here for as long
 			// as the caller is willing to wait. Only the runtime agent record carries
 			// the deploy outcome, so a failure is invisible without this second read.
-			status, detail := runtimeDeployStatus(ctx, cl, apiResp.JSON200.RuntimeAgentId)
+			status, detail, readErr := runtimeDeployStatus(ctx, cl, apiResp.JSON200.RuntimeAgentId)
+			lastDeployErr = readErr
 			if status != "" {
 				lastDeploy = status
 			}
@@ -577,7 +583,7 @@ func waitForHostedAgentOnline(ctx context.Context, cl *client.Client, customer, 
 		}
 
 		if !time.Now().Before(deadline) {
-			return nil, fmt.Errorf("timed out after %s waiting for hosted agent to become online (last status %q, deploy status %q)", timeout, last, lastDeploy)
+			return nil, fmt.Errorf("timed out after %s waiting for hosted agent to become online (%s)", timeout, waitSummary(last, lastDeploy, lastDeployErr))
 		}
 		select {
 		case <-ctx.Done():
@@ -588,20 +594,43 @@ func waitForHostedAgentOnline(ctx context.Context, cl *client.Client, customer, 
 }
 
 // runtimeDeployStatus reads deploy_status and deploy_error from the runtime agent
-// record the hosted agent registers as. A read that does not produce a record
-// yields an empty status so the caller keeps waiting: the runtime record can lag
-// the hosted one right after create, and a transient blip must not fail an apply
-// that is otherwise progressing.
-func runtimeDeployStatus(ctx context.Context, cl *client.Client, runtimeAgentID string) (status, detail string) {
+// record the hosted agent registers as. It never fails the wait by itself: a 404 is
+// the record lagging the hosted one right after create, and any other failure is
+// returned so the caller can say the deploy status was unreadable rather than
+// silently reporting a plain timeout.
+//
+// That distinction matters because this endpoint needs a different capability than
+// the hosted-agent read (AGENT_READ vs HOSTED_AGENT_READ), so a narrowly scoped key
+// gets 403 here on every poll while the rest of the wait works.
+func runtimeDeployStatus(ctx context.Context, cl *client.Client, runtimeAgentID string) (status, detail string, err error) {
 	if runtimeAgentID == "" {
-		return "", ""
+		return "", "", nil
 	}
 	apiResp, err := cl.Gen.AgentsGetAgentWithResponse(ctx, runtimeAgentID)
 	if err != nil {
-		return "", ""
+		return "", "", err
 	}
-	if checkErr := client.Check(apiResp.HTTPResponse, apiResp.Body); checkErr != nil || apiResp.JSON200 == nil {
-		return "", ""
+	if checkErr := client.Check(apiResp.HTTPResponse, apiResp.Body); checkErr != nil {
+		if client.IsNotFound(checkErr) {
+			return "", "", nil
+		}
+		return "", "", checkErr
 	}
-	return enumPtrToString(apiResp.JSON200.DeployStatus), enumPtrToString(apiResp.JSON200.DeployError)
+	if apiResp.JSON200 == nil {
+		return "", "", nil
+	}
+	return enumPtrToString(apiResp.JSON200.DeployStatus), enumPtrToString(apiResp.JSON200.DeployError), nil
+}
+
+// waitSummary renders what the wait last saw, so a timeout says whether the deploy
+// status was still pending, or could not be read at all.
+func waitSummary(hostedStatus, deployStatus string, readErr error) string {
+	summary := fmt.Sprintf("last status %q", hostedStatus)
+	switch {
+	case readErr != nil:
+		summary += fmt.Sprintf(", deploy status unreadable: %s", readErr)
+	case deployStatus != "":
+		summary += fmt.Sprintf(", deploy status %q", deployStatus)
+	}
+	return summary
 }
