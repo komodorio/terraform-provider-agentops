@@ -48,7 +48,7 @@ resource "agentops_worker_catalog_deployment" "k8s_troubleshooter" {
 - `display_name` (String) Human-readable name for the deployed worker. Write-only. Changing this forces a new deployment.
 - `integration_connections` (Map of String) Integration connections to bind at deploy time, keyed by the provider the catalog entry requires. Write-only. Changing this forces a new deployment.
 - `mcp_group_id` (String) ID of an MCP gateway group to attach. Write-only. Changing this forces a new deployment.
-- `wait_for_online` (Boolean) Whether create should block until the deployed worker reports `online` (its first heartbeat). Defaults to `true`. Set to `false` to return as soon as the deployment is accepted. Note: a failed cluster-side provision is not reported back as `deploy_failed` for API-created workers, so a failure surfaces as a `wait_timeout` rather than an immediate error.
+- `wait_for_online` (Boolean) Whether create should block until the deployed worker reports `online` (its first heartbeat). Defaults to `true`. Set to `false` to return as soon as the deployment is accepted. A failed cluster-side provision ends the wait as soon as it is observed, reporting the control plane's own reason rather than running out the timeout.
 - `wait_timeout` (String) Maximum time to wait for the worker to become `online`, as a Go duration (e.g. `10m`, `90s`). Defaults to `10m`. Only used when `wait_for_online` is `true`.
 
 ### Read-Only

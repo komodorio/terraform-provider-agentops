@@ -5,6 +5,7 @@ package provider
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -141,4 +142,39 @@ resource "agentops_hosted_agent" "agents" {
 %s
 }
 `, agents)
+}
+
+// TestAccHostedAgentResourceDeployFailed covers the failure the hosted-agent
+// endpoint cannot express: a provision that never produced a worker leaves that
+// record on "draft" forever, so without reading the runtime agent record the apply
+// would sit until wait_timeout and then blame the timeout. The wait must end on the
+// first poll, carrying the control plane's own reason.
+func TestAccHostedAgentResourceDeployFailed(t *testing.T) {
+	mock := newMockServer(t)
+	mock.deployFails = true
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      testAccHostedAgentDeployFailedConfig(mock.URL),
+				ExpectError: regexp.MustCompile(`hosted agent deployment failed: Deploy failed`),
+			},
+		},
+	})
+}
+
+// The short wait_timeout is what makes a regression cheap: drop the runtime-record
+// read and this test fails in seconds on the timeout message instead of hanging for
+// the 10m default.
+func testAccHostedAgentDeployFailedConfig(endpoint string) string {
+	return mockProviderConfig(endpoint) + `
+resource "agentops_hosted_agent" "failed" {
+  agent_id       = "triage"
+  instructions   = "Triage incoming alerts."
+  credential_ref = "cred_1"
+  wait_timeout   = "20s"
+}
+`
 }
