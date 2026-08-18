@@ -10,7 +10,9 @@ package client
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 
 	"github.com/hashicorp/go-retryablehttp"
 
@@ -22,10 +24,16 @@ import (
 // https://staging.agentops.komodor.com for staging or a self-hosted URL).
 const DefaultEndpoint = "https://agentops.komodor.com"
 
-// Client wraps the generated ClientWithResponses. Resources reach the API via
-// the embedded Gen; there is no bespoke per-resource HTTP.
+// Client wraps the generated ClientWithResponses. Resources reach the API via the
+// embedded Gen. Post exists for the few routes the vendored spec does not carry
+// yet, so a resource still never builds its own HTTP client.
 type Client struct {
 	Gen *gen.ClientWithResponses
+
+	endpoint  string
+	apiKey    string
+	userAgent string
+	http      *http.Client
 }
 
 // New builds a Client pointed at endpoint, authenticating every request with the
@@ -54,7 +62,37 @@ func New(endpoint, apiKey, userAgent string) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("building AgentOps client: %w", err)
 	}
-	return &Client{Gen: gc}, nil
+	return &Client{
+		Gen:       gc,
+		endpoint:  strings.TrimSuffix(endpoint, "/"),
+		apiKey:    apiKey,
+		userAgent: userAgent,
+		http:      retry.StandardClient(),
+	}, nil
+}
+
+// Post issues a bodyless POST to path (rooted, e.g. "/api/v1/…"), with the same
+// auth, User-Agent and retry behaviour as the generated calls. It is for routes
+// the vendored OpenAPI spec has not caught up with; anything the spec covers must
+// go through Gen instead.
+func (c *Client) Post(ctx context.Context, path string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint+path, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("User-Agent", "terraform-provider-agentops/"+c.userAgent)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close() //nolint:errcheck // read-only close on a response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	return Check(resp, body)
 }
 
 // APIError is returned for any non-2xx response. It carries the status code and
@@ -90,8 +128,18 @@ func Check(httpResp *http.Response, body []byte) error {
 // IsNotFound reports whether err is an APIError with a 404 status. Resources use
 // it in Read to detect out-of-band deletion and drop the resource from state.
 func IsNotFound(err error) bool {
+	return isStatus(err, http.StatusNotFound)
+}
+
+// IsConflict reports whether err is an APIError with a 409 status, which the API
+// uses for "this needs another step first" rather than for a hard failure.
+func IsConflict(err error) bool {
+	return isStatus(err, http.StatusConflict)
+}
+
+func isStatus(err error, code int) bool {
 	if apiErr, ok := err.(*APIError); ok {
-		return apiErr.StatusCode == http.StatusNotFound
+		return apiErr.StatusCode == code
 	}
 	return false
 }

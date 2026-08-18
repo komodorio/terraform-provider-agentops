@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -412,14 +413,41 @@ func (r *hostedAgentResource) Delete(ctx context.Context, req resource.DeleteReq
 		return
 	}
 
-	apiResp, err := r.client.Gen.HostedAgentsDeleteHostedAgentWithResponse(ctx, state.Customer.ValueString(), state.AgentID.ValueString())
-	if err != nil {
-		resp.Diagnostics.AddError("Error deleting hosted agent", err.Error())
-		return
-	}
-	if err := client.Check(apiResp.HTTPResponse, apiResp.Body); err != nil && !client.IsNotFound(err) {
+	if err := deleteHostedAgent(ctx, r.client, state.Customer.ValueString(), state.AgentID.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Error deleting hosted agent", err.Error())
 	}
+}
+
+// deleteHostedAgent removes the hosted agent behind either resource that produces
+// one. On an account with hosted lifecycle enabled, deleting an agent that
+// deployed successfully is refused with 409 until it is archived — the archive
+// scales it to zero, and the delete then tears the record down. Agents whose
+// deploy failed or is still running are deleted without that step, which is why
+// this only archives when the API asks for it.
+//
+// The archive route is absent from the vendored OpenAPI spec, so it goes through
+// client.Post rather than the generated client.
+func deleteHostedAgent(ctx context.Context, cl *client.Client, customer, agentID string) error {
+	del := func() error {
+		apiResp, err := cl.Gen.HostedAgentsDeleteHostedAgentWithResponse(ctx, customer, agentID)
+		if err != nil {
+			return err
+		}
+		if err := client.Check(apiResp.HTTPResponse, apiResp.Body); err != nil && !client.IsNotFound(err) {
+			return err
+		}
+		return nil
+	}
+
+	err := del()
+	if !client.IsConflict(err) {
+		return err
+	}
+	archive := fmt.Sprintf("/api/v1/hosted-agents/%s/%s/archive", url.PathEscape(customer), url.PathEscape(agentID))
+	if archiveErr := cl.Post(ctx, archive); archiveErr != nil {
+		return fmt.Errorf("%w (archiving it first failed: %s)", err, archiveErr)
+	}
+	return del()
 }
 
 // ImportState accepts "<customer>/<agent_id>". Write-only spec fields cannot be

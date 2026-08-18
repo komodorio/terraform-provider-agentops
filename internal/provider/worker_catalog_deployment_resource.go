@@ -303,12 +303,7 @@ func (r *workerCatalogDeploymentResource) Delete(ctx context.Context, req resour
 		return
 	}
 
-	apiResp, err := r.client.Gen.HostedAgentsDeleteHostedAgentWithResponse(ctx, state.Customer.ValueString(), state.AgentID.ValueString())
-	if err != nil {
-		resp.Diagnostics.AddError("Error deleting deployed worker", err.Error())
-		return
-	}
-	if err := client.Check(apiResp.HTTPResponse, apiResp.Body); err != nil && !client.IsNotFound(err) {
+	if err := deleteHostedAgent(ctx, r.client, state.Customer.ValueString(), state.AgentID.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Error deleting deployed worker", err.Error())
 	}
 }

@@ -206,3 +206,29 @@ func TestAccHostedAgentResourceRuntimeRecordLags(t *testing.T) {
 		},
 	})
 }
+
+// TestAccHostedAgentResourceDeleteArchivesFirst covers teardown on an account with
+// hosted lifecycle enabled, where deleting a live agent is refused with 409 until
+// it has been archived. The destroy at the end of the step is the assertion: it
+// fails the test if the archive step is missing.
+func TestAccHostedAgentResourceDeleteArchivesFirst(t *testing.T) {
+	mock := newMockServer(t)
+	mock.tune(func(m *mockServer) { m.deleteNeedsArchive = true })
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy: func(*terraform.State) error {
+			if n := mock.hostedAgentCount(); n != 0 {
+				return fmt.Errorf("hosted agent was not deleted: %d left on the server", n)
+			}
+			return nil
+		},
+		Steps: []resource.TestStep{
+			{
+				Config: testAccHostedAgentConfig(mock.URL, "gpt-4o"),
+				Check:  resource.TestCheckResourceAttr("agentops_hosted_agent.test", "agent_id", "triage"),
+			},
+		},
+	})
+}

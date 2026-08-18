@@ -71,7 +71,10 @@ type mockServer struct {
 	// hostedPollsDeploying is how many GETs a hosted agent stays "deploying" before
 	// it comes online. Zero, the default, comes online on the first read.
 	hostedPollsDeploying int
-	seq                  int
+	// deleteNeedsArchive mirrors an account with hosted lifecycle enabled, where a
+	// successfully deployed agent cannot be deleted until it has been archived.
+	deleteNeedsArchive bool
+	seq                int
 }
 
 var (
@@ -104,6 +107,7 @@ var (
 	channelRouteIDRe      = regexp.MustCompile(`^/api/v1/channels/([^/]+)/routes/([^/]+)$`)
 	hostedAgentByPathRe   = regexp.MustCompile(`^/api/v1/hosted-agents/([^/]+)/([^/]+)$`)
 	runtimeAgentByIDRe    = regexp.MustCompile(`^/api/v1/agents/([^/]+)$`)
+	hostedAgentArchiveRe  = regexp.MustCompile(`^/api/v1/hosted-agents/([^/]+)/([^/]+)/archive$`)
 	workerCatalogDeployRe = regexp.MustCompile(`^/api/v1/worker-catalog/([^/]+)/deploy$`)
 )
 
@@ -255,6 +259,9 @@ func (m *mockServer) handle(w http.ResponseWriter, r *http.Request) {
 
 	case r.URL.Path == "/api/v1/hosted-agents" && r.Method == http.MethodPost:
 		m.createHostedAgent(w, r)
+	case hostedAgentArchiveRe.MatchString(r.URL.Path) && r.Method == http.MethodPost:
+		mm := hostedAgentArchiveRe.FindStringSubmatch(r.URL.Path)
+		m.archiveHostedAgent(w, mm[1], mm[2])
 	case hostedAgentByPathRe.MatchString(r.URL.Path):
 		mm := hostedAgentByPathRe.FindStringSubmatch(r.URL.Path)
 		m.hostedAgentByPath(w, r, mm[1], mm[2])
@@ -1096,6 +1103,20 @@ func (m *mockServer) runtimeAgentByID(w http.ResponseWriter, agentID string) {
 	writeJSON(w, http.StatusOK, rec)
 }
 
+// archiveHostedAgent marks a hosted agent archived, the step the control plane
+// demands before a live agent may be deleted.
+func (m *mockServer) archiveHostedAgent(w http.ResponseWriter, customer, agentID string) {
+	key := customer + "/" + agentID
+	rec, ok := m.hostedAgs[key]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "hosted agent not found"})
+		return
+	}
+	rec["isArchived"] = true
+	m.hostedAgs[key] = rec
+	writeJSON(w, http.StatusOK, rec)
+}
+
 // deployWorkerCatalog simulates a catalog deploy: the server derives the customer
 // and assigns an agent_id when the client omits one, then returns a hosted agent
 // (which the resource then reads/deletes via the hosted-agents endpoints).
@@ -1152,11 +1173,23 @@ func (m *mockServer) hostedAgentByPath(w http.ResponseWriter, r *http.Request, c
 		m.hostedAgs[key] = rec
 		writeJSON(w, http.StatusOK, rec)
 	case http.MethodDelete:
+		if m.deleteNeedsArchive && rec["isArchived"] != true {
+			writeJSON(w, http.StatusConflict, map[string]any{"detail": "archive the agent before deleting it"})
+			return
+		}
 		delete(m.hostedAgs, key)
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{})
 	}
+}
+
+// hostedAgentCount reports how many hosted agents the server still holds, for
+// destroy assertions.
+func (m *mockServer) hostedAgentCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.hostedAgs)
 }
 
 func valueOr(v, def any) any {
