@@ -3,12 +3,12 @@
 page_title: "agentops_worker_catalog_deployment Resource - agentops"
 subcategory: ""
 description: |-
-  Deploys a curated worker from the worker catalog. The server pins the image and derives the customer and credentials from the catalog entry and your account, so you only name the instance — the result is a managed hosted agent. Deploy-time inputs are write-only (the API does not return them), so out-of-band changes to them are not detected, and changing any of them forces a new deployment. This resource does not support import: the originating catalog_id and the write-only inputs cannot be recovered from the API.
+  Deploys a curated worker from the worker catalog. The server pins the image and derives the customer and credentials from the catalog entry and your account, so you only name the instance — the result is a managed hosted agent. Destroying one archives it first where the account requires that, and waits for the archive to finish before deleting. Deploy-time inputs are write-only (the API does not return them), so out-of-band changes to them are not detected, and changing any of them forces a new deployment. This resource does not support import: the originating catalog_id and the write-only inputs cannot be recovered from the API.
 ---
 
 # agentops_worker_catalog_deployment (Resource)
 
-Deploys a curated worker from the worker catalog. The server pins the image and derives the customer and credentials from the catalog entry and your account, so you only name the instance — the result is a managed hosted agent. Deploy-time inputs are write-only (the API does not return them), so out-of-band changes to them are not detected, and changing any of them forces a new deployment. This resource does not support import: the originating `catalog_id` and the write-only inputs cannot be recovered from the API.
+Deploys a curated worker from the worker catalog. The server pins the image and derives the customer and credentials from the catalog entry and your account, so you only name the instance — the result is a managed hosted agent. Destroying one archives it first where the account requires that, and waits for the archive to finish before deleting. Deploy-time inputs are write-only (the API does not return them), so out-of-band changes to them are not detected, and changing any of them forces a new deployment. This resource does not support import: the originating `catalog_id` and the write-only inputs cannot be recovered from the API.
 
 ## Example Usage
 

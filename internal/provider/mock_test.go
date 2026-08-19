@@ -71,7 +71,17 @@ type mockServer struct {
 	// hostedPollsDeploying is how many GETs a hosted agent stays "deploying" before
 	// it comes online. Zero, the default, comes online on the first read.
 	hostedPollsDeploying int
-	seq                  int
+	// deleteNeedsArchive mirrors an account with hosted lifecycle enabled, where a
+	// successfully deployed agent cannot be deleted until it has been archived.
+	deleteNeedsArchive bool
+	// archiveSettlesAfter is how many deploy-status reads the archive stays
+	// in_progress for, standing in for the scale-to-zero deploy taking a while.
+	archiveSettlesAfter int
+	// revokedTokens records the agents whose worker token the delete revoked. The
+	// real API only revokes on the decommission path, which a delete issued while
+	// the archive deploy is still in flight never reaches.
+	revokedTokens map[string]bool
+	seq           int
 }
 
 var (
@@ -104,6 +114,7 @@ var (
 	channelRouteIDRe      = regexp.MustCompile(`^/api/v1/channels/([^/]+)/routes/([^/]+)$`)
 	hostedAgentByPathRe   = regexp.MustCompile(`^/api/v1/hosted-agents/([^/]+)/([^/]+)$`)
 	runtimeAgentByIDRe    = regexp.MustCompile(`^/api/v1/agents/([^/]+)$`)
+	hostedAgentArchiveRe  = regexp.MustCompile(`^/api/v1/hosted-agents/([^/]+)/([^/]+)/archive$`)
 	workerCatalogDeployRe = regexp.MustCompile(`^/api/v1/worker-catalog/([^/]+)/deploy$`)
 )
 
@@ -118,21 +129,22 @@ func (m *mockServer) tune(fn func(*mockServer)) {
 func newMockServer(t *testing.T) *mockServer {
 	t.Helper()
 	m := &mockServer{
-		triggers:    map[string]map[string]any{},
-		apiKeys:     map[string]map[string]any{},
-		schedules:   map[string]map[string]any{},
-		serviceAccs: map[string]map[string]any{},
-		policies:    map[string]map[string]any{},
-		conns:       map[string]map[string]any{},
-		bindings:    map[string]map[string]map[string]any{},
-		kbAgents:    map[string]map[string]map[string]any{},
-		stores:      map[string]map[string]map[string]any{},
-		incidentPls: map[string]map[string]any{},
-		reviewWfs:   map[string]map[string]any{},
-		graderCfgs:  map[string]map[string]any{},
-		channels:    map[string]map[string]any{},
-		chanRoutes:  map[string]map[string]map[string]any{},
-		hostedAgs:   map[string]map[string]any{},
+		triggers:      map[string]map[string]any{},
+		apiKeys:       map[string]map[string]any{},
+		schedules:     map[string]map[string]any{},
+		serviceAccs:   map[string]map[string]any{},
+		policies:      map[string]map[string]any{},
+		conns:         map[string]map[string]any{},
+		bindings:      map[string]map[string]map[string]any{},
+		kbAgents:      map[string]map[string]map[string]any{},
+		stores:        map[string]map[string]map[string]any{},
+		incidentPls:   map[string]map[string]any{},
+		reviewWfs:     map[string]map[string]any{},
+		graderCfgs:    map[string]map[string]any{},
+		channels:      map[string]map[string]any{},
+		chanRoutes:    map[string]map[string]map[string]any{},
+		hostedAgs:     map[string]map[string]any{},
+		revokedTokens: map[string]bool{},
 	}
 	for _, res := range crudRegistry {
 		m.stores[res.collection] = map[string]map[string]any{}
@@ -255,6 +267,9 @@ func (m *mockServer) handle(w http.ResponseWriter, r *http.Request) {
 
 	case r.URL.Path == "/api/v1/hosted-agents" && r.Method == http.MethodPost:
 		m.createHostedAgent(w, r)
+	case hostedAgentArchiveRe.MatchString(r.URL.Path) && r.Method == http.MethodPost:
+		mm := hostedAgentArchiveRe.FindStringSubmatch(r.URL.Path)
+		m.archiveHostedAgent(w, mm[1], mm[2])
 	case hostedAgentByPathRe.MatchString(r.URL.Path):
 		mm := hostedAgentByPathRe.FindStringSubmatch(r.URL.Path)
 		m.hostedAgentByPath(w, r, mm[1], mm[2])
@@ -1062,6 +1077,7 @@ func (m *mockServer) createHostedAgent(w http.ResponseWriter, r *http.Request) {
 		"repoBranch":     "main",
 		"repoPath":       "/",
 		"status":         m.initialHostedStatus(),
+		"deployStatus":   "done",
 		"createdAt":      mockTS,
 		"updatedAt":      mockTS,
 	}
@@ -1087,12 +1103,44 @@ func (m *mockServer) runtimeAgentByID(w http.ResponseWriter, agentID string) {
 		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "agent not found"})
 		return
 	}
-	rec := map[string]any{"agent_id": agentID, "status": "draft", "deploy_status": "in_progress"}
+	rec := map[string]any{"agent_id": agentID, "status": "draft", "deploy_status": m.deployStatusFor(agentID)}
 	if m.deployFails {
 		rec["status"] = "deploy_failed"
 		rec["deploy_status"] = "failed"
 		rec["deploy_error"] = "Deploy failed — could not provision the agent. Please try again or contact support."
 	}
+	writeJSON(w, http.StatusOK, rec)
+}
+
+// deployStatusFor reports the deploy status of the hosted agent registered under
+// this runtime id, letting an archive settle after archiveSettlesAfter reads.
+func (m *mockServer) deployStatusFor(runtimeAgentID string) string {
+	for key, rec := range m.hostedAgs {
+		if toString(rec["runtimeAgentId"]) != runtimeAgentID {
+			continue
+		}
+		if rec["deployStatus"] == "in_progress" && m.archiveSettlesAfter > 0 {
+			m.archiveSettlesAfter--
+			return "in_progress"
+		}
+		rec["deployStatus"] = "done"
+		m.hostedAgs[key] = rec
+		return "done"
+	}
+	return "done"
+}
+
+// archiveHostedAgent marks a hosted agent archived, the step the control plane
+// demands before a live agent may be deleted.
+func (m *mockServer) archiveHostedAgent(w http.ResponseWriter, customer, agentID string) {
+	key := customer + "/" + agentID
+	rec, ok := m.hostedAgs[key]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "hosted agent not found"})
+		return
+	}
+	rec["isArchived"] = true
+	rec["deployStatus"] = "in_progress"
 	writeJSON(w, http.StatusOK, rec)
 }
 
@@ -1118,6 +1166,7 @@ func (m *mockServer) deployWorkerCatalog(w http.ResponseWriter, r *http.Request,
 		"repoBranch":     "main",
 		"repoPath":       "/",
 		"status":         m.initialHostedStatus(),
+		"deployStatus":   "done",
 		"createdAt":      mockTS,
 		"updatedAt":      mockTS,
 	}
@@ -1152,11 +1201,39 @@ func (m *mockServer) hostedAgentByPath(w http.ResponseWriter, r *http.Request, c
 		m.hostedAgs[key] = rec
 		writeJSON(w, http.StatusOK, rec)
 	case http.MethodDelete:
+		// Routing order matches the control plane: an in-flight deploy is abandoned
+		// without revoking the worker token, and only a settled deploy reaches the
+		// archive gate and the decommission that does revoke.
+		if rec["deployStatus"] == "in_progress" {
+			delete(m.hostedAgs, key)
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if m.deleteNeedsArchive && rec["isArchived"] != true {
+			writeJSON(w, http.StatusConflict, map[string]any{"detail": "archive the agent before deleting it"})
+			return
+		}
+		m.revokedTokens[toString(rec["runtimeAgentId"])] = true
 		delete(m.hostedAgs, key)
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{})
 	}
+}
+
+// tokenRevoked reports whether the delete revoked this agent's worker token.
+func (m *mockServer) tokenRevoked(runtimeAgentID string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.revokedTokens[runtimeAgentID]
+}
+
+// hostedAgentCount reports how many hosted agents the server still holds, for
+// destroy assertions.
+func (m *mockServer) hostedAgentCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.hostedAgs)
 }
 
 func valueOr(v, def any) any {

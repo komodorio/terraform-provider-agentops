@@ -72,7 +72,9 @@ func (r *workerCatalogDeploymentResource) Schema(ctx context.Context, req resour
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Deploys a curated worker from the worker catalog. The server pins the image and " +
 			"derives the customer and credentials from the catalog entry and your account, so you only name the " +
-			"instance — the result is a managed hosted agent. Deploy-time inputs are write-only (the API does not " +
+			"instance — the result is a managed hosted agent. Destroying one archives it first where the " +
+			"account requires that, and waits for the archive to finish before deleting. " +
+			"Deploy-time inputs are write-only (the API does not " +
 			"return them), so out-of-band changes to them are not detected, and changing any of them forces a new " +
 			"deployment. This resource does not support import: the originating `catalog_id` and the write-only " +
 			"inputs cannot be recovered from the API.",
@@ -303,12 +305,7 @@ func (r *workerCatalogDeploymentResource) Delete(ctx context.Context, req resour
 		return
 	}
 
-	apiResp, err := r.client.Gen.HostedAgentsDeleteHostedAgentWithResponse(ctx, state.Customer.ValueString(), state.AgentID.ValueString())
-	if err != nil {
-		resp.Diagnostics.AddError("Error deleting deployed worker", err.Error())
-		return
-	}
-	if err := client.Check(apiResp.HTTPResponse, apiResp.Body); err != nil && !client.IsNotFound(err) {
+	if err := deleteHostedAgent(ctx, r.client, state.Customer.ValueString(), state.AgentID.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Error deleting deployed worker", err.Error())
 	}
 }
