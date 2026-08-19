@@ -9,6 +9,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -30,10 +31,10 @@ const DefaultEndpoint = "https://agentops.komodor.com"
 type Client struct {
 	Gen *gen.ClientWithResponses
 
-	endpoint  string
-	apiKey    string
-	userAgent string
-	http      *http.Client
+	endpoint   string
+	apiKey     string
+	userAgent  string
+	httpClient *http.Client
 }
 
 // New builds a Client pointed at endpoint, authenticating every request with the
@@ -47,28 +48,32 @@ func New(endpoint, apiKey, userAgent string) (*Client, error) {
 	// CheckRetry policy). Retry-After is honored for 429/503.
 	retry.RetryMax = 4
 
+	c := &Client{
+		endpoint:   strings.TrimSuffix(endpoint, "/"),
+		apiKey:     apiKey,
+		userAgent:  userAgent,
+		httpClient: retry.StandardClient(),
+	}
 	gc, err := gen.NewClientWithResponses(
 		endpoint,
-		gen.WithHTTPClient(retry.StandardClient()),
+		gen.WithHTTPClient(c.httpClient),
 		gen.WithRequestEditorFn(func(_ context.Context, req *http.Request) error {
-			req.Header.Set("Authorization", "Bearer "+apiKey)
-			return nil
-		}),
-		gen.WithRequestEditorFn(func(_ context.Context, req *http.Request) error {
-			req.Header.Set("User-Agent", "terraform-provider-agentops/"+userAgent)
+			c.setHeaders(req)
 			return nil
 		}),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("building AgentOps client: %w", err)
 	}
-	return &Client{
-		Gen:       gc,
-		endpoint:  strings.TrimSuffix(endpoint, "/"),
-		apiKey:    apiKey,
-		userAgent: userAgent,
-		http:      retry.StandardClient(),
-	}, nil
+	c.Gen = gc
+	return c, nil
+}
+
+// setHeaders applies the auth and attribution every request carries, so the
+// generated calls and Post cannot drift apart.
+func (c *Client) setHeaders(req *http.Request) {
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("User-Agent", "terraform-provider-agentops/"+c.userAgent)
 }
 
 // Post issues a bodyless POST to path (rooted, e.g. "/api/v1/…"), with the same
@@ -80,14 +85,13 @@ func (c *Client) Post(ctx context.Context, path string) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	req.Header.Set("User-Agent", "terraform-provider-agentops/"+c.userAgent)
+	c.setHeaders(req)
 
-	resp, err := c.http.Do(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close() //nolint:errcheck // read-only close on a response body
+	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
@@ -131,15 +135,14 @@ func IsNotFound(err error) bool {
 	return isStatus(err, http.StatusNotFound)
 }
 
-// IsConflict reports whether err is an APIError with a 409 status, which the API
-// uses for "this needs another step first" rather than for a hard failure.
+// IsConflict reports whether err is an APIError with a 409 status. What a 409
+// means is per-endpoint, so callers must match on the response body before acting
+// on one.
 func IsConflict(err error) bool {
 	return isStatus(err, http.StatusConflict)
 }
 
 func isStatus(err error, code int) bool {
-	if apiErr, ok := err.(*APIError); ok {
-		return apiErr.StatusCode == code
-	}
-	return false
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode == code
 }

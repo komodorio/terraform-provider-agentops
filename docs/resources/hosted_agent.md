@@ -3,12 +3,12 @@
 page_title: "agentops_hosted_agent Resource - agentops"
 subcategory: ""
 description: |-
-  A Komodor-hosted agent: a managed agent deployment built from instructions, skills and an optional container image. Deployment-spec fields are write-only — the API does not return them, so out-of-band changes to them are not detected.
+  A Komodor-hosted agent: a managed agent deployment built from instructions, skills and an optional container image. Deployment-spec fields are write-only — the API does not return them, so out-of-band changes to them are not detected. Destroying an agent that deployed successfully archives it first where the account requires that, and waits for the archive to finish before deleting.
 ---
 
 # agentops_hosted_agent (Resource)
 
-A Komodor-hosted agent: a managed agent deployment built from instructions, skills and an optional container image. Deployment-spec fields are write-only — the API does not return them, so out-of-band changes to them are not detected.
+A Komodor-hosted agent: a managed agent deployment built from instructions, skills and an optional container image. Deployment-spec fields are write-only — the API does not return them, so out-of-band changes to them are not detected. Destroying an agent that deployed successfully archives it first where the account requires that, and waits for the archive to finish before deleting.
 
 ## Example Usage
 

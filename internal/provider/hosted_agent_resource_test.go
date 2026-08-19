@@ -209,18 +209,29 @@ func TestAccHostedAgentResourceRuntimeRecordLags(t *testing.T) {
 
 // TestAccHostedAgentResourceDeleteArchivesFirst covers teardown on an account with
 // hosted lifecycle enabled, where deleting a live agent is refused with 409 until
-// it has been archived. The destroy at the end of the step is the assertion: it
-// fails the test if the archive step is missing.
+// it has been archived. The archive starts a deploy, and deleting before that
+// deploy settles drops the record without revoking the agent's worker token — so
+// the assertion is not just that the agent is gone, but that it was decommissioned.
 func TestAccHostedAgentResourceDeleteArchivesFirst(t *testing.T) {
 	mock := newMockServer(t)
-	mock.tune(func(m *mockServer) { m.deleteNeedsArchive = true })
+	mock.tune(func(m *mockServer) {
+		m.deleteNeedsArchive = true
+		m.archiveSettlesAfter = 2
+	})
+
+	previous := hostedAgentPollInterval
+	hostedAgentPollInterval = 10 * time.Millisecond
+	t.Cleanup(func() { hostedAgentPollInterval = previous })
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		CheckDestroy: func(*terraform.State) error {
+		CheckDestroy: func(s *terraform.State) error {
 			if n := mock.hostedAgentCount(); n != 0 {
 				return fmt.Errorf("hosted agent was not deleted: %d left on the server", n)
+			}
+			if !mock.tokenRevoked("rt-ha_1") {
+				return fmt.Errorf("agent was deleted without revoking its worker token: the delete ran before the archive settled")
 			}
 			return nil
 		},
@@ -228,6 +239,39 @@ func TestAccHostedAgentResourceDeleteArchivesFirst(t *testing.T) {
 			{
 				Config: testAccHostedAgentConfig(mock.URL, "gpt-4o"),
 				Check:  resource.TestCheckResourceAttr("agentops_hosted_agent.test", "agent_id", "triage"),
+			},
+		},
+	})
+}
+
+// TestAccHostedAgentResourceDeleteArchiveNeverSettles covers the archive deploy
+// never finishing. Deleting anyway would leak the worker token, so the destroy has
+// to fail loudly and leave the agent in place.
+func TestAccHostedAgentResourceDeleteArchiveNeverSettles(t *testing.T) {
+	mock := newMockServer(t)
+	mock.tune(func(m *mockServer) {
+		m.deleteNeedsArchive = true
+		m.archiveSettlesAfter = 1 << 30
+	})
+
+	previousInterval, previousTimeout := hostedAgentPollInterval, hostedAgentArchiveTimeout
+	hostedAgentPollInterval, hostedAgentArchiveTimeout = 10*time.Millisecond, 50*time.Millisecond
+	t.Cleanup(func() {
+		hostedAgentPollInterval, hostedAgentArchiveTimeout = previousInterval, previousTimeout
+	})
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccHostedAgentConfig(mock.URL, "gpt-4o"),
+				Check:  resource.TestCheckResourceAttr("agentops_hosted_agent.test", "agent_id", "triage"),
+			},
+			{
+				Config:      testAccHostedAgentConfig(mock.URL, "gpt-4o"),
+				Destroy:     true,
+				ExpectError: regexp.MustCompile(`scale-to-zero deploy was still in_progress`),
 			},
 		},
 	})

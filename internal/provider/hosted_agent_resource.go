@@ -37,7 +37,13 @@ const (
 	// provision that failed. The field is a free-form string in the spec, so it is
 	// matched by value rather than by a generated enum.
 	runtimeDeployStatusFailed = "failed"
+	// runtimeDeployStatusDone is deploy_status for a deploy that finished.
+	runtimeDeployStatusDone = "done"
 )
+
+// hostedAgentArchiveTimeout bounds the wait for an archive deploy to finish during
+// a delete. A var so tests do not have to outlast it.
+var hostedAgentArchiveTimeout = 10 * time.Minute
 
 // Ensure the resource satisfies the framework interfaces.
 var (
@@ -119,7 +125,9 @@ func (r *hostedAgentResource) Schema(ctx context.Context, req resource.SchemaReq
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "A Komodor-hosted agent: a managed agent deployment built from instructions, " +
 			"skills and an optional container image. Deployment-spec fields are write-only — the API does " +
-			"not return them, so out-of-band changes to them are not detected.",
+			"not return them, so out-of-band changes to them are not detected. Destroying an agent that " +
+			"deployed successfully archives it first where the account requires that, and waits for the " +
+			"archive to finish before deleting.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Hosted agent record identifier.",
@@ -420,10 +428,14 @@ func (r *hostedAgentResource) Delete(ctx context.Context, req resource.DeleteReq
 
 // deleteHostedAgent removes the hosted agent behind either resource that produces
 // one. On an account with hosted lifecycle enabled, deleting an agent that
-// deployed successfully is refused with 409 until it is archived — the archive
-// scales it to zero, and the delete then tears the record down. Agents whose
-// deploy failed or is still running are deleted without that step, which is why
-// this only archives when the API asks for it.
+// deployed successfully is refused with 409 until it has been archived, so this
+// archives and retries — but only after the archive has finished.
+//
+// Waiting is the whole point. Archiving starts its own deploy, and the delete
+// routes on deploy status before it looks at the archive: deleting while that
+// deploy is in flight takes the abandon-an-incomplete-deploy path, which drops
+// the record without revoking the agent's worker token. The wait keeps the
+// delete on the decommission path that does.
 //
 // The archive route is absent from the vendored OpenAPI spec, so it goes through
 // client.Post rather than the generated client.
@@ -440,14 +452,69 @@ func deleteHostedAgent(ctx context.Context, cl *client.Client, customer, agentID
 	}
 
 	err := del()
-	if !client.IsConflict(err) {
+	// Only the archive conflict is answered by archiving. Every other 409 is left
+	// alone: archiving is not a free retry, it takes the agent offline.
+	if !client.IsConflict(err) || !strings.Contains(err.Error(), "archive the agent") {
 		return err
 	}
+
 	archive := fmt.Sprintf("/api/v1/hosted-agents/%s/%s/archive", url.PathEscape(customer), url.PathEscape(agentID))
-	if archiveErr := cl.Post(ctx, archive); archiveErr != nil {
-		return fmt.Errorf("%w (archiving it first failed: %s)", err, archiveErr)
+	// A 409 here means the agent is already archived or already deploying, which is
+	// the state the wait below is for. Anything else leaves the delete unfinished.
+	if archiveErr := cl.Post(ctx, archive); archiveErr != nil && !client.IsConflict(archiveErr) {
+		return fmt.Errorf("%w (archiving it first failed: %w)", err, archiveErr)
+	}
+	if waitErr := awaitArchiveSettled(ctx, cl, customer, agentID); waitErr != nil {
+		return waitErr
 	}
 	return del()
+}
+
+// awaitArchiveSettled blocks until the archive deploy leaves in_progress. It
+// reports the deploy status through the runtime agent record, the only one that
+// carries it. A read it cannot make is not treated as settled: deleting on a
+// guess is what leaks the worker token.
+func awaitArchiveSettled(ctx context.Context, cl *client.Client, customer, agentID string) error {
+	apiResp, err := cl.Gen.HostedAgentsGetHostedAgentWithResponse(ctx, customer, agentID)
+	if err != nil {
+		return fmt.Errorf("archived %s, but could not read it back to see the archive finish: %w", agentID, err)
+	}
+	if checkErr := client.Check(apiResp.HTTPResponse, apiResp.Body); checkErr != nil {
+		if client.IsNotFound(checkErr) {
+			return nil // already gone; nothing left to delete
+		}
+		return fmt.Errorf("archived %s, but could not read it back to see the archive finish: %w", agentID, checkErr)
+	}
+	runtimeAgentID := apiResp.JSON200.RuntimeAgentId
+
+	deadline := time.Now().Add(hostedAgentArchiveTimeout)
+	last := ""
+	for {
+		status, detail, readErr := runtimeDeployStatus(ctx, cl, runtimeAgentID)
+		switch {
+		case readErr != nil:
+			last = "unreadable: " + readErr.Error()
+		case status != "":
+			last = status
+		}
+		if status == runtimeDeployStatusDone {
+			return nil
+		}
+		if status == runtimeDeployStatusFailed {
+			return fmt.Errorf("archiving %s failed (%s), so it cannot be deleted yet: unarchive it or resolve the deploy, then destroy again", agentID, detail)
+		}
+
+		if !time.Now().Before(deadline) {
+			return fmt.Errorf(
+				"archived %s but its scale-to-zero deploy was still %s after %s. Deleting now would drop the record without revoking the agent's worker token, so nothing was deleted: let the deploy finish, then destroy again",
+				agentID, last, hostedAgentArchiveTimeout)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(hostedAgentPollInterval):
+		}
+	}
 }
 
 // ImportState accepts "<customer>/<agent_id>". Write-only spec fields cannot be
