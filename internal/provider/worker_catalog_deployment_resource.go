@@ -121,8 +121,8 @@ func (r *workerCatalogDeploymentResource) Schema(ctx context.Context, req resour
 			"wait_for_online": schema.BoolAttribute{
 				MarkdownDescription: "Whether create should block until the deployed worker reports `online` (its " +
 					"first heartbeat). Defaults to `true`. Set to `false` to return as soon as the deployment is " +
-					"accepted. Note: a failed cluster-side provision is not reported back as `deploy_failed` for " +
-					"API-created workers, so a failure surfaces as a `wait_timeout` rather than an immediate error.",
+					"accepted. A failed cluster-side provision ends the wait as soon as it is observed, reporting " +
+					"the control plane's own reason rather than running out the timeout.",
 				Optional: true,
 			},
 			"wait_timeout": schema.StringAttribute{
@@ -334,8 +334,8 @@ func workerCatalogDeploymentApplyComputed(m *workerCatalogDeploymentResourceMode
 
 // waitForOnlineIfRequested blocks until the deployed worker reports online when
 // wait_for_online is enabled, refreshing plan with the final computed fields. On
-// timeout/failure it persists the current computed state (so the worker is tracked
-// rather than orphaned) and records an error.
+// a failed deploy or a timeout it persists the current computed state (so the worker
+// is tracked rather than orphaned) and records an error.
 func (r *workerCatalogDeploymentResource) waitForOnlineIfRequested(ctx context.Context, plan *workerCatalogDeploymentResourceModel, state *tfsdk.State, diags *diag.Diagnostics) {
 	wait, timeout, cfgDiags := hostedAgentWaitConfig(plan.WaitForOnline, plan.WaitTimeout)
 	diags.Append(cfgDiags...)
@@ -346,7 +346,7 @@ func (r *workerCatalogDeploymentResource) waitForOnlineIfRequested(ctx context.C
 	final, err := waitForHostedAgentOnline(ctx, r.client, plan.Customer.ValueString(), plan.AgentID.ValueString(), timeout)
 	if err != nil {
 		diags.Append(state.Set(ctx, plan)...)
-		diags.AddError("Timed out waiting for deployed worker to become online", err.Error())
+		diags.AddError("Deployed worker did not come online", err.Error())
 		return
 	}
 	workerCatalogDeploymentApplyComputed(plan, final)

@@ -5,7 +5,9 @@ package provider
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
@@ -141,4 +143,66 @@ resource "agentops_hosted_agent" "agents" {
 %s
 }
 `, agents)
+}
+
+// TestAccHostedAgentResourceDeployFailed covers the failure the hosted-agent
+// endpoint cannot express: a provision that never produced a worker leaves that
+// record on "draft" forever, so without reading the runtime agent record the apply
+// would sit until wait_timeout and then blame the timeout. The wait must end on the
+// first poll, carrying the control plane's own reason.
+func TestAccHostedAgentResourceDeployFailed(t *testing.T) {
+	mock := newMockServer(t)
+	mock.tune(func(m *mockServer) { m.deployFails = true })
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      testAccHostedAgentDeployFailedConfig(mock.URL),
+				ExpectError: regexp.MustCompile(`hosted agent deployment failed: Deploy failed`),
+			},
+		},
+	})
+}
+
+// The short wait_timeout is what makes a regression cheap: drop the runtime-record
+// read and this test fails in seconds on the timeout message instead of hanging for
+// the 10m default.
+func testAccHostedAgentDeployFailedConfig(endpoint string) string {
+	return mockProviderConfig(endpoint) + `
+resource "agentops_hosted_agent" "failed" {
+  agent_id       = "triage"
+  instructions   = "Triage incoming alerts."
+  credential_ref = "cred_1"
+  wait_timeout   = "20s"
+}
+`
+}
+
+// TestAccHostedAgentResourceRuntimeRecordLags covers the other half of the deploy
+// check: the runtime record can 404 for a while after create, and that must not be
+// read as a failure. The hosted agent stays "deploying" for one poll so the runtime
+// record is actually consulted, and 404s on that poll.
+func TestAccHostedAgentResourceRuntimeRecordLags(t *testing.T) {
+	mock := newMockServer(t)
+	mock.tune(func(m *mockServer) {
+		m.hostedPollsDeploying = 1
+		m.runtimeNotFound = 1
+	})
+
+	previous := hostedAgentPollInterval
+	hostedAgentPollInterval = 10 * time.Millisecond
+	t.Cleanup(func() { hostedAgentPollInterval = previous })
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccHostedAgentConfig(mock.URL, "gpt-4o"),
+				Check:  resource.TestCheckResourceAttr("agentops_hosted_agent.test", "agent_id", "triage"),
+			},
+		},
+	})
 }

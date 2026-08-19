@@ -61,7 +61,17 @@ type mockServer struct {
 	channels    map[string]map[string]any            // channels
 	chanRoutes  map[string]map[string]map[string]any // channel_id -> route_id -> route
 	hostedAgs   map[string]map[string]any            // "customer/agent_id" -> hosted agent
-	seq         int
+	// deployFails makes every hosted agent this server creates behave like a failed
+	// cluster-side provision: the hosted record stays "draft" (that record's status
+	// only ever tracks heartbeats) while the runtime agent record reports the failure.
+	deployFails bool
+	// runtimeNotFound is how many runtime-agent reads 404 before the record appears,
+	// standing in for the runtime record lagging the hosted one after create.
+	runtimeNotFound int
+	// hostedPollsDeploying is how many GETs a hosted agent stays "deploying" before
+	// it comes online. Zero, the default, comes online on the first read.
+	hostedPollsDeploying int
+	seq                  int
 }
 
 var (
@@ -93,8 +103,17 @@ var (
 	channelRoutesRe       = regexp.MustCompile(`^/api/v1/channels/([^/]+)/routes$`)
 	channelRouteIDRe      = regexp.MustCompile(`^/api/v1/channels/([^/]+)/routes/([^/]+)$`)
 	hostedAgentByPathRe   = regexp.MustCompile(`^/api/v1/hosted-agents/([^/]+)/([^/]+)$`)
+	runtimeAgentByIDRe    = regexp.MustCompile(`^/api/v1/agents/([^/]+)$`)
 	workerCatalogDeployRe = regexp.MustCompile(`^/api/v1/worker-catalog/([^/]+)/deploy$`)
 )
+
+// tune applies mock configuration under the lock every handler reads it with, so a
+// test can set up a server that is already serving traffic.
+func (m *mockServer) tune(fn func(*mockServer)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	fn(m)
+}
 
 func newMockServer(t *testing.T) *mockServer {
 	t.Helper()
@@ -239,6 +258,8 @@ func (m *mockServer) handle(w http.ResponseWriter, r *http.Request) {
 	case hostedAgentByPathRe.MatchString(r.URL.Path):
 		mm := hostedAgentByPathRe.FindStringSubmatch(r.URL.Path)
 		m.hostedAgentByPath(w, r, mm[1], mm[2])
+	case runtimeAgentByIDRe.MatchString(r.URL.Path) && r.Method == http.MethodGet:
+		m.runtimeAgentByID(w, runtimeAgentByIDRe.FindStringSubmatch(r.URL.Path)[1])
 	case workerCatalogDeployRe.MatchString(r.URL.Path) && r.Method == http.MethodPost:
 		mm := workerCatalogDeployRe.FindStringSubmatch(r.URL.Path)
 		m.deployWorkerCatalog(w, r, mm[1])
@@ -1040,12 +1061,39 @@ func (m *mockServer) createHostedAgent(w http.ResponseWriter, r *http.Request) {
 		"repoName":       "agent-" + agentID,
 		"repoBranch":     "main",
 		"repoPath":       "/",
-		"status":         "deploying",
+		"status":         m.initialHostedStatus(),
 		"createdAt":      mockTS,
 		"updatedAt":      mockTS,
 	}
 	m.hostedAgs[customer+"/"+agentID] = rec
 	writeJSON(w, http.StatusCreated, rec)
+}
+
+// initialHostedStatus is "deploying" for a provision that will come online, and
+// "draft" for one that fails: a hosted record whose worker never heartbeats never
+// leaves draft, which is exactly what hides the failure from that endpoint.
+func (m *mockServer) initialHostedStatus() string {
+	if m.deployFails {
+		return "draft"
+	}
+	return "deploying"
+}
+
+// runtimeAgentByID serves the runtime agent record, the only one carrying the
+// deploy outcome.
+func (m *mockServer) runtimeAgentByID(w http.ResponseWriter, agentID string) {
+	if m.runtimeNotFound > 0 {
+		m.runtimeNotFound--
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "agent not found"})
+		return
+	}
+	rec := map[string]any{"agent_id": agentID, "status": "draft", "deploy_status": "in_progress"}
+	if m.deployFails {
+		rec["status"] = "deploy_failed"
+		rec["deploy_status"] = "failed"
+		rec["deploy_error"] = "Deploy failed — could not provision the agent. Please try again or contact support."
+	}
+	writeJSON(w, http.StatusOK, rec)
 }
 
 // deployWorkerCatalog simulates a catalog deploy: the server derives the customer
@@ -1069,7 +1117,7 @@ func (m *mockServer) deployWorkerCatalog(w http.ResponseWriter, r *http.Request,
 		"repoName":       "agent-" + agentID,
 		"repoBranch":     "main",
 		"repoPath":       "/",
-		"status":         "deploying",
+		"status":         m.initialHostedStatus(),
 		"createdAt":      mockTS,
 		"updatedAt":      mockTS,
 	}
@@ -1089,7 +1137,11 @@ func (m *mockServer) hostedAgentByPath(w http.ResponseWriter, r *http.Request, c
 		// Simulate provisioning completing: an agent created as "deploying"
 		// reports "online" once polled, so wait_for_online terminates.
 		if rec["status"] == "deploying" {
-			rec["status"] = "online"
+			if m.hostedPollsDeploying > 0 {
+				m.hostedPollsDeploying--
+			} else {
+				rec["status"] = "online"
+			}
 			m.hostedAgs[key] = rec
 		}
 		writeJSON(w, http.StatusOK, rec)
