@@ -4,11 +4,14 @@ page_title: "agentops_grader_config Resource - agentops"
 subcategory: ""
 description: |-
   A grader configuration: has a grader agent automatically score a sample of another agent's runs for quality.
+  Deprecated: the underlying API has been removed.
 ---
 
 # agentops_grader_config (Resource)
 
 A grader configuration: has a grader agent automatically score a sample of another agent's runs for quality.
+
+**Deprecated:** the underlying API has been removed.
 
 ## Example Usage
 
@@ -26,20 +29,20 @@ resource "agentops_grader_config" "prod_quality" {
 
 ### Required
 
-- `grader_agent_id` (String) ID of the agent that performs the grading.
-- `target_agent_id` (String) ID of the agent whose runs are graded. Changing this forces a new grader config.
+- `grader_agent_id` (String)
+- `target_agent_id` (String)
 
 ### Optional
 
-- `guidelines` (String) Free-form grading guidelines passed to the grader agent.
-- `sample_rate` (Number) Percentage of the target agent's runs to grade (0-100). Server-defaulted when omitted.
+- `guidelines` (String)
+- `sample_rate` (Number)
 
 ### Read-Only
 
-- `created_at` (String) Creation timestamp.
-- `id` (String) Grader configuration identifier.
-- `runs_seen` (Number) Number of target-agent runs observed by this grader config.
-- `updated_at` (String) Last-update timestamp.
+- `created_at` (String)
+- `id` (String) The ID of this resource.
+- `runs_seen` (Number)
+- `updated_at` (String)
 
 ## Import
 

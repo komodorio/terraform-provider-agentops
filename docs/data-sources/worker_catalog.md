@@ -34,7 +34,6 @@ output "ready_workers" {
 Read-Only:
 
 - `category` (String) Category.
-- `configurable_model` (Boolean) Whether the worker's model is configurable.
 - `description` (String) Description.
 - `docs_url` (String) Documentation URL.
 - `id` (String) Catalog entry identifier.
