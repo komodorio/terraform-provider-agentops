@@ -31,16 +31,6 @@ func boolToPtr(v types.Bool) *bool {
 	return &b
 }
 
-// int64ToIntPtr converts a Terraform int64 into a *int request field, mapping
-// null/unknown to nil so the field is omitted.
-func int64ToIntPtr(v types.Int64) *int {
-	if v.IsNull() || v.IsUnknown() {
-		return nil
-	}
-	i := int(v.ValueInt64())
-	return &i
-}
-
 // ptrToString converts an optional API string into a Terraform string, mapping
 // nil to null.
 func ptrToString(p *string) types.String {

@@ -12,7 +12,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/komodorio/terraform-provider-agentops/internal/client"
 )
@@ -29,17 +28,6 @@ func NewGraderConfigResource() resource.Resource {
 
 type graderConfigResource struct {
 	client *client.Client
-}
-
-type graderConfigResourceModel struct {
-	ID            types.String `tfsdk:"id"`
-	TargetAgentID types.String `tfsdk:"target_agent_id"`
-	GraderAgentID types.String `tfsdk:"grader_agent_id"`
-	Guidelines    types.String `tfsdk:"guidelines"`
-	SampleRate    types.Int64  `tfsdk:"sample_rate"`
-	RunsSeen      types.Int64  `tfsdk:"runs_seen"`
-	CreatedAt     types.String `tfsdk:"created_at"`
-	UpdatedAt     types.String `tfsdk:"updated_at"`
 }
 
 func (r *graderConfigResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
