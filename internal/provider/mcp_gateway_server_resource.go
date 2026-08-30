@@ -54,6 +54,7 @@ type mcpGatewayServerResourceModel struct {
 	TimeoutSeconds    types.Float64 `tfsdk:"timeout_seconds"`
 	Auth              types.String  `tfsdk:"auth"`
 	Transport         types.String  `tfsdk:"transport"`
+	OutpostID         types.String  `tfsdk:"outpost_id"`
 }
 
 func (r *mcpGatewayServerResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -158,6 +159,10 @@ func (r *mcpGatewayServerResource) Schema(ctx context.Context, req resource.Sche
 				Computed:            true,
 				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
+			"outpost_id": schema.StringAttribute{
+				MarkdownDescription: "Outpost whose tunnel reaches this upstream. When set, traffic to this server is routed through the outpost relay instead of a direct dial from the control plane.",
+				Optional:            true,
+			},
 		},
 	}
 }
@@ -221,6 +226,19 @@ func (r *mcpGatewayServerResource) Create(ctx context.Context, req resource.Crea
 		return
 	}
 
+	if !plan.OutpostID.IsNull() && !plan.OutpostID.IsUnknown() {
+		bindResp, err := r.client.Gen.GatewayAdminSetServerOutpostWithResponse(ctx, plan.ID.ValueString(),
+			gen.GatewayAdminSetServerOutpostJSONRequestBody{OutpostId: plan.OutpostID.ValueString()})
+		if err != nil {
+			resp.Diagnostics.AddError("Error binding MCP gateway server to outpost", err.Error())
+			return
+		}
+		if err := client.Check(bindResp.HTTPResponse, bindResp.Body); err != nil {
+			resp.Diagnostics.AddError("Error binding MCP gateway server to outpost", err.Error())
+			return
+		}
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -260,6 +278,12 @@ func (r *mcpGatewayServerResource) Read(ctx context.Context, req resource.ReadRe
 func (r *mcpGatewayServerResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan mcpGatewayServerResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	var state mcpGatewayServerResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -310,6 +334,41 @@ func (r *mcpGatewayServerResource) Update(ctx context.Context, req resource.Upda
 	resp.Diagnostics.Append(mcpServerApply(ctx, &plan, apiResp.JSON200)...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	oldOutpost := state.OutpostID.ValueString()
+	newOutpost := plan.OutpostID.ValueString()
+	if plan.OutpostID.IsNull() || plan.OutpostID.IsUnknown() {
+		newOutpost = ""
+	}
+	if state.OutpostID.IsNull() || state.OutpostID.IsUnknown() {
+		oldOutpost = ""
+	}
+
+	if newOutpost != oldOutpost {
+		if newOutpost == "" {
+			unbindResp, err := r.client.Gen.GatewayAdminDeleteServerOutpostWithResponse(ctx, plan.ID.ValueString())
+			if err != nil {
+				resp.Diagnostics.AddError("Error unbinding MCP gateway server from outpost", err.Error())
+				return
+			}
+			if err := client.Check(unbindResp.HTTPResponse, unbindResp.Body); err != nil && !client.IsNotFound(err) {
+				resp.Diagnostics.AddError("Error unbinding MCP gateway server from outpost", err.Error())
+				return
+			}
+			plan.OutpostID = types.StringNull()
+		} else {
+			bindResp, err := r.client.Gen.GatewayAdminSetServerOutpostWithResponse(ctx, plan.ID.ValueString(),
+				gen.GatewayAdminSetServerOutpostJSONRequestBody{OutpostId: newOutpost})
+			if err != nil {
+				resp.Diagnostics.AddError("Error binding MCP gateway server to outpost", err.Error())
+				return
+			}
+			if err := client.Check(bindResp.HTTPResponse, bindResp.Body); err != nil {
+				resp.Diagnostics.AddError("Error binding MCP gateway server to outpost", err.Error())
+				return
+			}
+		}
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
@@ -379,6 +438,8 @@ func mcpServerApply(ctx context.Context, m *mcpGatewayServerResourceModel, rec *
 	headers, d := mcpServerStringMapValue(ctx, rec.StaticHeaders)
 	diags.Append(d...)
 	m.StaticHeaders = headers
+
+	m.OutpostID = ptrToString(rec.OutpostId)
 
 	return diags
 }

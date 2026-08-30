@@ -301,7 +301,7 @@ func (r *hostedAgentResource) Create(ctx context.Context, req resource.CreateReq
 		Customer:      stringToPtr(plan.Customer),
 		AgentId:       plan.AgentID.ValueString(),
 		Instructions:  plan.Instructions.ValueString(),
-		CredentialRef: plan.CredentialRef.ValueString(),
+		CredentialRef: stringToPtr(plan.CredentialRef),
 		Model:         stringToPtr(plan.Model),
 		DisplayName:   stringToPtr(plan.DisplayName),
 		CommitMessage: stringToPtr(plan.CommitMessage),
@@ -541,13 +541,13 @@ func hostedAgentSkillsToAPI(items []hostedAgentSkillModel) *[]gen.HostedAgentSki
 	return &out
 }
 
-func hostedAgentAgentsToAPI(items []hostedAgentAgentModel) *[]gen.HostedAgentAgent {
+func hostedAgentAgentsToAPI(items []hostedAgentAgentModel) *[]gen.HostedAgentSubagent {
 	if items == nil {
 		return nil
 	}
-	out := make([]gen.HostedAgentAgent, 0, len(items))
+	out := make([]gen.HostedAgentSubagent, 0, len(items))
 	for _, a := range items {
-		out = append(out, gen.HostedAgentAgent{Id: a.ID.ValueString(), Content: a.Content.ValueString()})
+		out = append(out, gen.HostedAgentSubagent{Id: a.ID.ValueString(), Content: a.Content.ValueString()})
 	}
 	return &out
 }

@@ -130,6 +130,7 @@ func (p *KomodorAgentOpsProvider) Resources(ctx context.Context) []func() resour
 		NewChannelRouteResource,
 		NewHostedAgentResource,
 		NewWorkerCatalogDeploymentResource,
+		NewOutpostResource,
 	}
 }
 
@@ -141,6 +142,7 @@ func (p *KomodorAgentOpsProvider) DataSources(ctx context.Context) []func() data
 		NewWorkerCatalogDataSource,
 		NewSkillsDataSource,
 		NewReviewersDataSource,
+		NewOutpostInstallDataSource,
 	}
 }
 

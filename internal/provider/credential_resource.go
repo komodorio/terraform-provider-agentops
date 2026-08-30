@@ -229,8 +229,6 @@ func (r *credentialResource) Update(ctx context.Context, req resource.UpdateRequ
 	}
 	meta := apiResp.JSON200
 
-	// If the secret value changed, replace it via the dedicated PUT endpoint and
-	// use its (fresher) metadata response instead.
 	if !plan.Value.Equal(state.Value) {
 		valResp, err := r.client.Gen.CredentialsReplaceCredentialValueWithResponse(ctx, plan.ID.ValueString(),
 			gen.ReplaceCredentialValueRequest{Value: plan.Value.ValueString()})
@@ -242,11 +240,19 @@ func (r *credentialResource) Update(ctx context.Context, req resource.UpdateRequ
 			resp.Diagnostics.AddError("Error replacing credential value", err.Error())
 			return
 		}
-		if valResp.JSON200 == nil {
-			resp.Diagnostics.AddError("Error replacing credential value", "API returned an empty body")
+
+		rereadResp, err := r.client.Gen.CredentialsGetCredentialWithResponse(ctx, plan.ID.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Error re-reading credential after value replace", err.Error())
 			return
 		}
-		meta = valResp.JSON200
+		if err := client.Check(rereadResp.HTTPResponse, rereadResp.Body); err != nil {
+			resp.Diagnostics.AddError("Error re-reading credential after value replace", err.Error())
+			return
+		}
+		if rereadResp.JSON200 != nil {
+			meta = rereadResp.JSON200
+		}
 	}
 
 	// value is write-only; keep the (possibly new) value from the plan.

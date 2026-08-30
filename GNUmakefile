@@ -33,6 +33,11 @@ endif
 generate:
 	go run ./internal/specdowngrade api/openapi.json api/openapi.gen.json
 	go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config oapi-codegen.yaml api/openapi.gen.json
+	@# oapi-codegen assigns bare string literals to *EnumType Variant fields in
+	@# discriminated-union From/Merge methods. Patch until upstream is fixed.
+	@sed -i '' 's/v\.Variant = "\(pattern\)"/p := PatternCriterionModelVariant("\1"); v.Variant = \&p/' internal/client/gen/gen.go
+	@sed -i '' 's/v\.Variant = "\(content_pattern\)"/p := ModelRequestPatternCriterionModelVariant("\1"); v.Variant = \&p/' internal/client/gen/gen.go
+	@sed -i '' 's/v\.Variant = "\(response_pattern\)"/p := ToolResponsePatternCriterionModelVariant("\1"); v.Variant = \&p/' internal/client/gen/gen.go
 
 # Generate provider documentation (tfplugindocs), copyright headers, and format
 # the Terraform examples.
