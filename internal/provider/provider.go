@@ -106,6 +106,7 @@ func (p *KomodorAgentOpsProvider) Configure(ctx context.Context, req provider.Co
 
 func (p *KomodorAgentOpsProvider) Resources(ctx context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
+		NewAgentResource,
 		NewTriggerResource,
 		NewAPIKeyResource,
 		NewRoleResource,
