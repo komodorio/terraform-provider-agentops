@@ -36,6 +36,7 @@ type agentResource struct {
 }
 
 type agentResourceModel struct {
+	ID            types.String `tfsdk:"id"`
 	AgentID       types.String `tfsdk:"agent_id"`
 	Instructions  types.String `tfsdk:"instructions"`
 	DisplayName   types.String `tfsdk:"display_name"`
@@ -64,6 +65,11 @@ func (r *agentResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 			"in your own cluster. The `install_values` output is a ready-to-use values file for the " +
 			"`agentops-agent-base` Helm chart. Destroying the agent archives it first, then deletes it.",
 		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				MarkdownDescription: "Internal agent identifier assigned by the control plane.",
+				Computed:            true,
+				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
 			"agent_id": schema.StringAttribute{
 				MarkdownDescription: "Stable agent identifier (slug), unique within the account. Changing this forces a new agent.",
 				Required:            true,
@@ -173,7 +179,7 @@ func (r *agentResource) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
-	plan.AgentID = types.StringValue(created.AgentId)
+	plan.ID = types.StringValue(created.AgentId)
 	plan.InstallValues = types.StringValue(created.Values)
 	plan.InstallCommand = types.StringValue(created.Command)
 	plan.WorkerTokenHint = types.StringValue(created.WorkerTokenHint)
@@ -331,7 +337,10 @@ func (r *agentResource) refreshFromGetAPI(ctx context.Context, m *agentResourceM
 }
 
 func agentApplyInstance(m *agentResourceModel, inst *gen.AgentInstanceResponse) {
-	m.AgentID = types.StringValue(inst.AgentId)
+	m.ID = types.StringValue(inst.AgentId)
+	if inst.IdSlug != nil && *inst.IdSlug != "" {
+		m.AgentID = types.StringValue(*inst.IdSlug)
+	}
 	m.Status = types.StringValue(string(inst.Status))
 	m.Name = ptrToString(inst.Name)
 	m.IsArchived = boolPtrToBool(inst.IsArchived)

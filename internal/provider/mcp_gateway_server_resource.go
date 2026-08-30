@@ -221,14 +221,15 @@ func (r *mcpGatewayServerResource) Create(ctx context.Context, req resource.Crea
 		return
 	}
 
+	wantOutpost := plan.OutpostID
 	resp.Diagnostics.Append(mcpServerApply(ctx, &plan, apiResp.JSON201)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	if !plan.OutpostID.IsNull() && !plan.OutpostID.IsUnknown() {
+	if !wantOutpost.IsNull() && !wantOutpost.IsUnknown() {
 		bindResp, err := r.client.Gen.GatewayAdminSetServerOutpostWithResponse(ctx, plan.ID.ValueString(),
-			gen.GatewayAdminSetServerOutpostJSONRequestBody{OutpostId: plan.OutpostID.ValueString()})
+			gen.GatewayAdminSetServerOutpostJSONRequestBody{OutpostId: wantOutpost.ValueString()})
 		if err != nil {
 			resp.Diagnostics.AddError("Error binding MCP gateway server to outpost", err.Error())
 			return
@@ -237,6 +238,7 @@ func (r *mcpGatewayServerResource) Create(ctx context.Context, req resource.Crea
 			resp.Diagnostics.AddError("Error binding MCP gateway server to outpost", err.Error())
 			return
 		}
+		plan.OutpostID = wantOutpost
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)

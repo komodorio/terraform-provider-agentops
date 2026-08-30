@@ -30,6 +30,7 @@ A self-hosted KaOps agent. Creating this resource registers the agent with the c
 ### Read-Only
 
 - `created_at` (String) Creation timestamp.
+- `id` (String) Internal agent identifier assigned by the control plane.
 - `install_command` (String) Helm install command returned by the API at creation time.
 - `install_values` (String, Sensitive) Complete Helm values YAML returned by the API at creation time. Contains image coordinates, agent config, control-plane URL, and the worker token. Use as `-f values.yaml` with the `agentops-agent-base` chart, passing the worker token separately via `--set-string` if desired.
 - `is_archived` (Boolean) Whether the agent has been archived.
