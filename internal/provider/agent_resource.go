@@ -347,28 +347,9 @@ const agentDeleteWaitTimeout = 90 * time.Second
 func (r *agentResource) awaitDeletable(ctx context.Context, agentID string) error {
 	deadline := time.Now().Add(agentDeleteWaitTimeout)
 	for {
-		apiResp, err := r.client.Gen.AgentsGetAgentWithResponse(ctx, agentID)
-		if err != nil {
+		if agentReadyToDelete(r.client, ctx, agentID) {
 			return nil
 		}
-		if checkErr := client.Check(apiResp.HTTPResponse, apiResp.Body); checkErr != nil {
-			if client.IsNotFound(checkErr) {
-				return nil
-			}
-			return nil
-		}
-		if apiResp.JSON200 != nil {
-			if boolPtrTrue(apiResp.JSON200.IsArchived) {
-				total := 0
-				if apiResp.JSON200.InstancesTotal != nil {
-					total = *apiResp.JSON200.InstancesTotal
-				}
-				if total == 0 {
-					return nil
-				}
-			}
-		}
-
 		if !time.Now().Before(deadline) {
 			return fmt.Errorf("timed out waiting %s for agent %s to become deletable", agentDeleteWaitTimeout, agentID)
 		}
@@ -380,6 +361,26 @@ func (r *agentResource) awaitDeletable(ctx context.Context, agentID string) erro
 	}
 }
 
-func boolPtrTrue(p *bool) bool {
-	return p != nil && *p
+// agentReadyToDelete returns true when the agent is safe to delete (archived
+// with no running instances), already gone, or unreadable (proceed with delete).
+func agentReadyToDelete(cl *client.Client, ctx context.Context, agentID string) bool {
+	apiResp, err := cl.Gen.AgentsGetAgentWithResponse(ctx, agentID)
+	if err != nil {
+		return true
+	}
+	if checkErr := client.Check(apiResp.HTTPResponse, apiResp.Body); checkErr != nil {
+		return true
+	}
+	if apiResp.JSON200 == nil {
+		return true
+	}
+	inst := apiResp.JSON200
+	if inst.IsArchived != nil && *inst.IsArchived {
+		total := 0
+		if inst.InstancesTotal != nil {
+			total = *inst.InstancesTotal
+		}
+		return total == 0
+	}
+	return false
 }
