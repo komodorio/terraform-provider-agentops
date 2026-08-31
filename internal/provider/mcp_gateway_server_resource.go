@@ -5,6 +5,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -22,10 +23,22 @@ import (
 
 // Ensure the resource satisfies the framework interfaces.
 var (
-	_ resource.Resource                = &mcpGatewayServerResource{}
-	_ resource.ResourceWithConfigure   = &mcpGatewayServerResource{}
-	_ resource.ResourceWithImportState = &mcpGatewayServerResource{}
+	_ resource.Resource                   = &mcpGatewayServerResource{}
+	_ resource.ResourceWithConfigure      = &mcpGatewayServerResource{}
+	_ resource.ResourceWithImportState    = &mcpGatewayServerResource{}
+	_ resource.ResourceWithValidateConfig = &mcpGatewayServerResource{}
 )
+
+// The two kinds of source PUT /servers/{id}/credential accepts, spelled the way
+// its credential_source discriminator does.
+const (
+	credentialSourceCredential  = "credential"
+	credentialSourceIntegration = "integration"
+)
+
+// credentialBindingNote documents reconcileManagedOptional's contract on the
+// credential attributes, so the generated docs say it in both places.
+const credentialBindingNote = "Left unmanaged while unset: a credential bound outside Terraform is not adopted into state. Once set, the binding is reconciled on every plan, so unbinding it out of band plans a re-bind."
 
 // NewMCPGatewayServerResource is the constructor registered with the provider.
 func NewMCPGatewayServerResource() resource.Resource {
@@ -55,6 +68,10 @@ type mcpGatewayServerResourceModel struct {
 	Auth              types.String  `tfsdk:"auth"`
 	Transport         types.String  `tfsdk:"transport"`
 	OutpostID         types.String  `tfsdk:"outpost_id"`
+	// CredentialSource is the discriminator for CredentialSourceID; null means the
+	// default, "credential".
+	CredentialSource   types.String `tfsdk:"credential_source"`
+	CredentialSourceID types.String `tfsdk:"credential_source_id"`
 }
 
 func (r *mcpGatewayServerResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -75,8 +92,14 @@ func (r *mcpGatewayServerResource) Schema(ctx context.Context, req resource.Sche
 				Required:            true,
 			},
 			"url": schema.StringAttribute{
-				MarkdownDescription: "Endpoint URL for the upstream MCP server.",
-				Required:            true,
+				MarkdownDescription: "Endpoint URL for the upstream MCP server. " +
+					"**Binding an `integration` credential can rewrite it once:** when the connection's provider spec " +
+					"carries an MCP URL template — today only `aws` and `datadog` — `PUT .../credential` replaces the " +
+					"server's URL with that provider's regional host. The create response is read before the bind, so " +
+					"state keeps the configured value and the next refresh reports the rewritten one as drift. That " +
+					"diff is one-time rather than perpetual, because applying it sends the configured URL back; declare " +
+					"the regional host here if you want the control plane's value to be the one that stays.",
+				Required: true,
 			},
 			"allow": schema.ListAttribute{
 				MarkdownDescription: "Glob patterns of tool names to expose (empty = all).",
@@ -114,8 +137,20 @@ func (r *mcpGatewayServerResource) Schema(ctx context.Context, req resource.Sche
 				PlanModifiers:       []planmodifier.Map{mapplanmodifier.UseStateForUnknown()},
 			},
 			"static_headers": schema.MapAttribute{
-				MarkdownDescription: "Headers always sent upstream. Values may embed ${env:VAR}, ${file:path} or " +
-					"${credential:NAME} secret references, resolved at connect time; only the reference is stored.",
+				MarkdownDescription: "Headers always sent upstream. Values may embed `${env:VAR}`, `${file:path}` or " +
+					"`${credential:NAME}` secret references, resolved at connect time; only the reference is stored.\n\n" +
+					"~> **`${credential:NAME}` needs a credential bound to this server.** The gateway only substitutes " +
+					"credential references on a server that has a `credential` binding — set `credential_source_id`. " +
+					"With no binding, nothing resolves the reference and the literal text `${credential:NAME}` is sent " +
+					"upstream as the header value, which the upstream rejects (typically `401`) with no error raised " +
+					"by Terraform or the control plane. `${env:VAR}` and `${file:path}` are unaffected.\n\n" +
+					"~> **The bound credential gates the substitution; it does not select the secret.** A reference is " +
+					"resolved by the **name** it carries, looked up among the account's credentials, and a resolved " +
+					"reference wins over the bound credential's own `Authorization: Bearer` header. So any valid " +
+					"`credential_source_id` of source `credential` — not necessarily the credential the reference " +
+					"names — is enough to make every reference on the server resolve. Bind the credential the header " +
+					"actually names anyway: it is what the dial falls back to when no reference resolves, and it is " +
+					"what an audit of the binding will show as the secret this upstream is reached with.",
 				ElementType:   types.StringType,
 				Optional:      true,
 				Computed:      true,
@@ -164,7 +199,54 @@ func (r *mcpGatewayServerResource) Schema(ctx context.Context, req resource.Sche
 				MarkdownDescription: "Outpost whose tunnel reaches this upstream. When set, traffic to this server is routed through the outpost relay instead of a direct dial from the control plane.",
 				Optional:            true,
 			},
+			"credential_source_id": schema.StringAttribute{
+				MarkdownDescription: "Credential bound to this server: the id of an `agentops_credential` (the default) or, with " +
+					"`credential_source = \"integration\"`, of an `agentops_integration_connection`. The binding " +
+					"authenticates the upstream dial, and is also what makes a `${credential:NAME}` reference in " +
+					"`static_headers` resolve — for a server whose headers carry such a reference it is only that " +
+					"gate, because the reference is resolved by name and wins over this credential's bearer header. " +
+					"See the note on `static_headers`. " + credentialBindingNote,
+				Optional: true,
+			},
+			"credential_source": schema.StringAttribute{
+				MarkdownDescription: "What kind of source `credential_source_id` names: `credential` for an AgentOps credential, " +
+					"`integration` for an integration connection. Defaults to `credential`, and is only meaningful " +
+					"alongside `credential_source_id`.",
+				Optional: true,
+			},
 		},
+	}
+}
+
+// ValidateConfig rejects the credential attribute combinations the API cannot be
+// asked for, at plan time rather than as a 422 mid-apply. The framework has no
+// declarative "requires" or "one of" here — no validator module is vendored — so
+// the two rules live in code.
+func (r *mcpGatewayServerResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var cfg mcpGatewayServerResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &cfg)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if !cfg.CredentialSource.IsNull() && !cfg.CredentialSource.IsUnknown() {
+		if src := cfg.CredentialSource.ValueString(); src != credentialSourceCredential && src != credentialSourceIntegration {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("credential_source"),
+				"Invalid credential_source",
+				fmt.Sprintf("Expected %q or %q, got %q.", credentialSourceCredential, credentialSourceIntegration, src),
+			)
+		}
+	}
+
+	// Unknown counts as set: an id that is another resource's attribute is unknown
+	// at validate time, and refusing that would ban the only useful way to write it.
+	if !cfg.CredentialSource.IsNull() && cfg.CredentialSourceID.IsNull() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("credential_source"),
+			"Missing credential_source_id",
+			"credential_source only says what kind of source credential_source_id names, so it cannot be set on its own.",
+		)
 	}
 }
 
@@ -223,19 +305,35 @@ func (r *mcpGatewayServerResource) Create(ctx context.Context, req resource.Crea
 	}
 
 	wantOutpost := normalizeOptionalString(plan.OutpostID)
+	wantCredential := normalizeOptionalString(plan.CredentialSourceID)
+	wantCredentialSource := normalizeOptionalString(plan.CredentialSource)
 	resp.Diagnostics.Append(mcpServerApply(ctx, &plan, apiResp.JSON201)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	// The binding is a separate call, so the create response never carries it and
-	// outpost_id is Optional-not-Computed: state has to end up equal to config.
+	// Both bindings are separate calls, so the create response never carries them
+	// and the attributes are Optional-not-Computed: state has to end up equal to
+	// config. reconcileManagedOptional with no observation says exactly that.
 	plan.OutpostID = wantOutpost
+	plan.CredentialSourceID = reconcileManagedOptional(phaseApply, wantCredential, types.StringNull())
+	plan.CredentialSource = reconcileManagedOptional(phaseApply, wantCredentialSource, types.StringNull())
 
 	if !wantOutpost.IsNull() {
 		if !r.bindOutpost(ctx, plan.ID.ValueString(), wantOutpost.ValueString(), &resp.Diagnostics) {
 			// The POST above already created the server. Saving state taints the
 			// resource; returning without it orphans a record the next apply duplicates.
 			plan.OutpostID = types.StringNull()
+			plan.CredentialSourceID = types.StringNull()
+			plan.CredentialSource = types.StringNull()
+			resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+			return
+		}
+	}
+
+	if !wantCredential.IsNull() {
+		if !r.bindCredential(ctx, plan.ID.ValueString(), credentialSourceOf(wantCredentialSource), wantCredential.ValueString(), &resp.Diagnostics) {
+			plan.CredentialSourceID = types.StringNull()
+			plan.CredentialSource = types.StringNull()
 			resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 			return
 		}
@@ -269,9 +367,33 @@ func (r *mcpGatewayServerResource) Read(ctx context.Context, req resource.ReadRe
 		return
 	}
 
+	plannedCredential := state.CredentialSourceID
+	plannedCredentialSource := state.CredentialSource
+
 	resp.Diagnostics.Append(mcpServerApply(ctx, &state, apiResp.JSON200)...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	// LabeledServerRecord carries no credential fields, so the binding has to be
+	// read from its own listing — and only when this resource owns one, or an
+	// unset attribute would cost every refresh an extra call to learn nothing.
+	if !plannedCredential.IsNull() && !plannedCredential.IsUnknown() {
+		observedSource, observedID, ok := r.observeCredential(ctx, state.ID.ValueString(), &resp.Diagnostics)
+		if !ok {
+			return
+		}
+		state.CredentialSourceID = reconcileManagedOptional(phaseRefresh, plannedCredential, observedID)
+		// The source attribute defaults to "credential", so a config that left it
+		// null must not adopt the "credential" the listing reports back.
+		if plannedCredentialSource.IsNull() || plannedCredentialSource.IsUnknown() {
+			state.CredentialSource = types.StringNull()
+		} else {
+			state.CredentialSource = reconcileManagedOptional(phaseRefresh, plannedCredentialSource, observedSource)
+		}
+	} else {
+		state.CredentialSourceID = types.StringNull()
+		state.CredentialSource = types.StringNull()
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
@@ -291,6 +413,8 @@ func (r *mcpGatewayServerResource) Update(ctx context.Context, req resource.Upda
 	}
 
 	wantOutpost := normalizeOptionalString(plan.OutpostID)
+	wantCredential := normalizeOptionalString(plan.CredentialSourceID)
+	wantCredentialSource := normalizeOptionalString(plan.CredentialSource)
 
 	body := gen.UpdateServerRequest{
 		Name:              stringToPtr(plan.Name),
@@ -344,6 +468,9 @@ func (r *mcpGatewayServerResource) Update(ctx context.Context, req resource.Upda
 	// with it. Restore the plan before deciding anything, or a response with a
 	// null outpost reads as a removal and deletes a binding nobody touched.
 	plan.OutpostID = wantOutpost
+	// Same for the credential, except the response never carries it at all.
+	plan.CredentialSourceID = reconcileManagedOptional(phaseApply, wantCredential, types.StringNull())
+	plan.CredentialSource = reconcileManagedOptional(phaseApply, wantCredentialSource, types.StringNull())
 
 	oldOutpost := state.OutpostID.ValueString()
 	if state.OutpostID.IsNull() || state.OutpostID.IsUnknown() {
@@ -358,6 +485,26 @@ func (r *mcpGatewayServerResource) Update(ctx context.Context, req resource.Upda
 			}
 			plan.OutpostID = types.StringNull()
 		} else if !r.bindOutpost(ctx, plan.ID.ValueString(), newOutpost, &resp.Diagnostics) {
+			return
+		}
+	}
+
+	oldCredential := optionalStringValue(state.CredentialSourceID)
+	newCredential := wantCredential.ValueString()
+	oldCredentialSource := credentialSourceOf(normalizeOptionalString(state.CredentialSource))
+	newCredentialSource := credentialSourceOf(wantCredentialSource)
+
+	// The source is part of the identity of a binding: the same id under a
+	// different discriminator names a different row, so a changed source rebinds.
+	if newCredential != oldCredential || (newCredential != "" && newCredentialSource != oldCredentialSource) {
+		if newCredential == "" {
+			if !r.unbindCredential(ctx, plan.ID.ValueString(), &resp.Diagnostics) {
+				return
+			}
+			plan.CredentialSourceID = types.StringNull()
+			plan.CredentialSource = types.StringNull()
+		} else if !r.bindCredential(ctx, plan.ID.ValueString(), newCredentialSource, newCredential, &resp.Diagnostics) {
+			// PUT is an upsert, so a rebind needs no unbind first.
 			return
 		}
 	}
@@ -394,6 +541,78 @@ func (r *mcpGatewayServerResource) unbindOutpost(ctx context.Context, serverID s
 		return false
 	}
 	return true
+}
+
+// bindCredential binds a credential (or integration connection) to this server.
+// PUT is an upsert, so this is also the rebind. Reports whether it was applied.
+func (r *mcpGatewayServerResource) bindCredential(ctx context.Context, serverID, source, sourceID string, diags *diag.Diagnostics) bool {
+	// client.Do, not the typed wrapper: this route refuses an inactive integration
+	// connection with a 422 whose detail is a plain string, which the wrapper drops
+	// on the floor along with the status. See client.Do.
+	if _, err := client.Do(r.client.Gen.GatewayAdminSetServerCredential(ctx, serverID,
+		gen.GatewayAdminSetServerCredentialJSONRequestBody{
+			CredentialSource:   gen.McpServerCredentialUpdateCredentialSource(source),
+			CredentialSourceId: sourceID,
+		})); err != nil {
+		diags.AddError("Error binding credential to MCP gateway server", err.Error())
+		return false
+	}
+	return true
+}
+
+// unbindCredential detaches this server's credential. Reports whether the binding
+// is gone. The 404 tolerance is load-bearing, not belt-and-braces: DELETE
+// .../credential answers 404 "server credential not found" for a server with no
+// binding, so an unbind that lands after the binding is already gone — removed in
+// the UI between this plan's refresh and its apply — has to read as success.
+func (r *mcpGatewayServerResource) unbindCredential(ctx context.Context, serverID string, diags *diag.Diagnostics) bool {
+	if _, err := client.Do(r.client.Gen.GatewayAdminDeleteServerCredential(ctx, serverID)); err != nil && !client.IsNotFound(err) {
+		diags.AddError("Error unbinding credential from MCP gateway server", err.Error())
+		return false
+	}
+	return true
+}
+
+// observeCredential reports the binding the control plane holds for one server.
+// There is no per-server read, so it filters the account-wide listing; a server
+// with no binding is simply absent from it, which is two nulls, not an error.
+func (r *mcpGatewayServerResource) observeCredential(ctx context.Context, serverID string, diags *diag.Diagnostics) (source, sourceID types.String, ok bool) {
+	listResp, err := r.client.Gen.GatewayAdminListServerCredentialsWithResponse(ctx)
+	if err != nil {
+		diags.AddError("Error reading MCP gateway server credential binding", err.Error())
+		return types.StringNull(), types.StringNull(), false
+	}
+	if err := client.Check(listResp.HTTPResponse, listResp.Body); err != nil {
+		diags.AddError("Error reading MCP gateway server credential binding", err.Error())
+		return types.StringNull(), types.StringNull(), false
+	}
+	if listResp.JSON200 == nil {
+		return types.StringNull(), types.StringNull(), true
+	}
+	for _, b := range *listResp.JSON200 {
+		if b.ServerId == serverID {
+			return types.StringValue(b.CredentialSource), types.StringValue(b.CredentialSourceId), true
+		}
+	}
+	return types.StringNull(), types.StringNull(), true
+}
+
+// credentialSourceOf resolves the optional discriminator to what the API is
+// actually sent: an unset credential_source means an AgentOps credential.
+func credentialSourceOf(v types.String) string {
+	if v.IsNull() || v.IsUnknown() || v.ValueString() == "" {
+		return credentialSourceCredential
+	}
+	return v.ValueString()
+}
+
+// optionalStringValue reads an Optional attribute as a plain string, mapping both
+// null and unknown to "" so a comparison against the plan is total.
+func optionalStringValue(v types.String) string {
+	if v.IsNull() || v.IsUnknown() {
+		return ""
+	}
+	return v.ValueString()
 }
 
 func (r *mcpGatewayServerResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {

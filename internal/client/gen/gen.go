@@ -6783,6 +6783,13 @@ type CreateSkillRequest struct {
 	Tags        *[]string          `json:"tags,omitempty"`
 }
 
+// CreateSlackTriggerRequest defines model for CreateSlackTriggerRequest.
+type CreateSlackTriggerRequest struct {
+	ChannelId string                  `json:"channel_id"`
+	MatchJson *map[string]interface{} `json:"match_json,omitempty"`
+	RuleType  *string                 `json:"rule_type,omitempty"`
+}
+
 // CreateWebhookTriggerRequest defines model for CreateWebhookTriggerRequest.
 type CreateWebhookTriggerRequest struct {
 	Alert               *WebhookAlertConfig                     `json:"alert,omitempty"`
@@ -12603,6 +12610,15 @@ type SlackDeliveryConfig struct {
 	Enabled     *bool   `json:"enabled,omitempty"`
 }
 
+// SlackTriggerInfo defines model for SlackTriggerInfo.
+type SlackTriggerInfo struct {
+	ChannelId string                  `json:"channel_id"`
+	IsEnabled bool                    `json:"is_enabled"`
+	MatchJson *map[string]interface{} `json:"match_json,omitempty"`
+	RouteId   string                  `json:"route_id"`
+	RuleType  string                  `json:"rule_type"`
+}
+
 // SortOrder defines model for SortOrder.
 type SortOrder string
 
@@ -14678,6 +14694,9 @@ type IncidentPipelinesCreateIncidentPipelineEndpointJSONRequestBody = CreateInci
 
 // IncidentPipelinesUpdateIncidentPipelineEndpointJSONRequestBody defines body for IncidentPipelinesUpdateIncidentPipelineEndpoint for application/json ContentType.
 type IncidentPipelinesUpdateIncidentPipelineEndpointJSONRequestBody = UpdateIncidentPipelineRequest
+
+// IncidentPipelinesCreateSlackTriggerEndpointJSONRequestBody defines body for IncidentPipelinesCreateSlackTriggerEndpoint for application/json ContentType.
+type IncidentPipelinesCreateSlackTriggerEndpointJSONRequestBody = CreateSlackTriggerRequest
 
 // InsightsSaveRecommendationEndpointJSONRequestBody defines body for InsightsSaveRecommendationEndpoint for application/json ContentType.
 type InsightsSaveRecommendationEndpointJSONRequestBody = SaveIssueRecommendationRequest
@@ -16878,6 +16897,17 @@ type ClientInterface interface {
 
 	// IncidentPipelinesPauseIncidentPipelineEndpoint request
 	IncidentPipelinesPauseIncidentPipelineEndpoint(ctx context.Context, pipelineId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// IncidentPipelinesListSlackTriggersEndpoint request
+	IncidentPipelinesListSlackTriggersEndpoint(ctx context.Context, pipelineId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// IncidentPipelinesCreateSlackTriggerEndpointWithBody request with any body
+	IncidentPipelinesCreateSlackTriggerEndpointWithBody(ctx context.Context, pipelineId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	IncidentPipelinesCreateSlackTriggerEndpoint(ctx context.Context, pipelineId string, body IncidentPipelinesCreateSlackTriggerEndpointJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// IncidentPipelinesDeleteSlackTriggerEndpoint request
+	IncidentPipelinesDeleteSlackTriggerEndpoint(ctx context.Context, pipelineId string, routeId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// IncidentPipelinesGetIncidentPipelineStatsEndpoint request
 	IncidentPipelinesGetIncidentPipelineStatsEndpoint(ctx context.Context, pipelineId string, params *IncidentPipelinesGetIncidentPipelineStatsEndpointParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -22415,6 +22445,54 @@ func (c *Client) IncidentPipelinesActivateIncidentPipelineEndpoint(ctx context.C
 
 func (c *Client) IncidentPipelinesPauseIncidentPipelineEndpoint(ctx context.Context, pipelineId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewIncidentPipelinesPauseIncidentPipelineEndpointRequest(c.Server, pipelineId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) IncidentPipelinesListSlackTriggersEndpoint(ctx context.Context, pipelineId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIncidentPipelinesListSlackTriggersEndpointRequest(c.Server, pipelineId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) IncidentPipelinesCreateSlackTriggerEndpointWithBody(ctx context.Context, pipelineId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIncidentPipelinesCreateSlackTriggerEndpointRequestWithBody(c.Server, pipelineId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) IncidentPipelinesCreateSlackTriggerEndpoint(ctx context.Context, pipelineId string, body IncidentPipelinesCreateSlackTriggerEndpointJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIncidentPipelinesCreateSlackTriggerEndpointRequest(c.Server, pipelineId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) IncidentPipelinesDeleteSlackTriggerEndpoint(ctx context.Context, pipelineId string, routeId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIncidentPipelinesDeleteSlackTriggerEndpointRequest(c.Server, pipelineId, routeId)
 	if err != nil {
 		return nil, err
 	}
@@ -38704,6 +38782,128 @@ func NewIncidentPipelinesPauseIncidentPipelineEndpointRequest(server string, pip
 	return req, nil
 }
 
+// NewIncidentPipelinesListSlackTriggersEndpointRequest generates requests for IncidentPipelinesListSlackTriggersEndpoint
+func NewIncidentPipelinesListSlackTriggersEndpointRequest(server string, pipelineId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "pipeline_id", pipelineId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/incident-pipelines/%s/slack-triggers", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewIncidentPipelinesCreateSlackTriggerEndpointRequest calls the generic IncidentPipelinesCreateSlackTriggerEndpoint builder with application/json body
+func NewIncidentPipelinesCreateSlackTriggerEndpointRequest(server string, pipelineId string, body IncidentPipelinesCreateSlackTriggerEndpointJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewIncidentPipelinesCreateSlackTriggerEndpointRequestWithBody(server, pipelineId, "application/json", bodyReader)
+}
+
+// NewIncidentPipelinesCreateSlackTriggerEndpointRequestWithBody generates requests for IncidentPipelinesCreateSlackTriggerEndpoint with any type of body
+func NewIncidentPipelinesCreateSlackTriggerEndpointRequestWithBody(server string, pipelineId string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "pipeline_id", pipelineId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/incident-pipelines/%s/slack-triggers", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewIncidentPipelinesDeleteSlackTriggerEndpointRequest generates requests for IncidentPipelinesDeleteSlackTriggerEndpoint
+func NewIncidentPipelinesDeleteSlackTriggerEndpointRequest(server string, pipelineId string, routeId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "pipeline_id", pipelineId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "route_id", routeId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/incident-pipelines/%s/slack-triggers/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewIncidentPipelinesGetIncidentPipelineStatsEndpointRequest generates requests for IncidentPipelinesGetIncidentPipelineStatsEndpoint
 func NewIncidentPipelinesGetIncidentPipelineStatsEndpointRequest(server string, pipelineId string, params *IncidentPipelinesGetIncidentPipelineStatsEndpointParams) (*http.Request, error) {
 	var err error
@@ -53531,6 +53731,17 @@ type ClientWithResponsesInterface interface {
 	// IncidentPipelinesPauseIncidentPipelineEndpointWithResponse request
 	IncidentPipelinesPauseIncidentPipelineEndpointWithResponse(ctx context.Context, pipelineId string, reqEditors ...RequestEditorFn) (*IncidentPipelinesPauseIncidentPipelineEndpointResponse, error)
 
+	// IncidentPipelinesListSlackTriggersEndpointWithResponse request
+	IncidentPipelinesListSlackTriggersEndpointWithResponse(ctx context.Context, pipelineId string, reqEditors ...RequestEditorFn) (*IncidentPipelinesListSlackTriggersEndpointResponse, error)
+
+	// IncidentPipelinesCreateSlackTriggerEndpointWithBodyWithResponse request with any body
+	IncidentPipelinesCreateSlackTriggerEndpointWithBodyWithResponse(ctx context.Context, pipelineId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*IncidentPipelinesCreateSlackTriggerEndpointResponse, error)
+
+	IncidentPipelinesCreateSlackTriggerEndpointWithResponse(ctx context.Context, pipelineId string, body IncidentPipelinesCreateSlackTriggerEndpointJSONRequestBody, reqEditors ...RequestEditorFn) (*IncidentPipelinesCreateSlackTriggerEndpointResponse, error)
+
+	// IncidentPipelinesDeleteSlackTriggerEndpointWithResponse request
+	IncidentPipelinesDeleteSlackTriggerEndpointWithResponse(ctx context.Context, pipelineId string, routeId string, reqEditors ...RequestEditorFn) (*IncidentPipelinesDeleteSlackTriggerEndpointResponse, error)
+
 	// IncidentPipelinesGetIncidentPipelineStatsEndpointWithResponse request
 	IncidentPipelinesGetIncidentPipelineStatsEndpointWithResponse(ctx context.Context, pipelineId string, params *IncidentPipelinesGetIncidentPipelineStatsEndpointParams, reqEditors ...RequestEditorFn) (*IncidentPipelinesGetIncidentPipelineStatsEndpointResponse, error)
 
@@ -62599,6 +62810,98 @@ func (r IncidentPipelinesPauseIncidentPipelineEndpointResponse) StatusCode() int
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r IncidentPipelinesPauseIncidentPipelineEndpointResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type IncidentPipelinesListSlackTriggersEndpointResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]SlackTriggerInfo
+	JSON422      *HTTPValidationError
+}
+
+// Status returns HTTPResponse.Status
+func (r IncidentPipelinesListSlackTriggersEndpointResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r IncidentPipelinesListSlackTriggersEndpointResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r IncidentPipelinesListSlackTriggersEndpointResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type IncidentPipelinesCreateSlackTriggerEndpointResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *SlackTriggerInfo
+	JSON422      *HTTPValidationError
+}
+
+// Status returns HTTPResponse.Status
+func (r IncidentPipelinesCreateSlackTriggerEndpointResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r IncidentPipelinesCreateSlackTriggerEndpointResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r IncidentPipelinesCreateSlackTriggerEndpointResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type IncidentPipelinesDeleteSlackTriggerEndpointResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON422      *HTTPValidationError
+}
+
+// Status returns HTTPResponse.Status
+func (r IncidentPipelinesDeleteSlackTriggerEndpointResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r IncidentPipelinesDeleteSlackTriggerEndpointResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r IncidentPipelinesDeleteSlackTriggerEndpointResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -76030,6 +76333,41 @@ func (c *ClientWithResponses) IncidentPipelinesPauseIncidentPipelineEndpointWith
 	return ParseIncidentPipelinesPauseIncidentPipelineEndpointResponse(rsp)
 }
 
+// IncidentPipelinesListSlackTriggersEndpointWithResponse request returning *IncidentPipelinesListSlackTriggersEndpointResponse
+func (c *ClientWithResponses) IncidentPipelinesListSlackTriggersEndpointWithResponse(ctx context.Context, pipelineId string, reqEditors ...RequestEditorFn) (*IncidentPipelinesListSlackTriggersEndpointResponse, error) {
+	rsp, err := c.IncidentPipelinesListSlackTriggersEndpoint(ctx, pipelineId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIncidentPipelinesListSlackTriggersEndpointResponse(rsp)
+}
+
+// IncidentPipelinesCreateSlackTriggerEndpointWithBodyWithResponse request with arbitrary body returning *IncidentPipelinesCreateSlackTriggerEndpointResponse
+func (c *ClientWithResponses) IncidentPipelinesCreateSlackTriggerEndpointWithBodyWithResponse(ctx context.Context, pipelineId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*IncidentPipelinesCreateSlackTriggerEndpointResponse, error) {
+	rsp, err := c.IncidentPipelinesCreateSlackTriggerEndpointWithBody(ctx, pipelineId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIncidentPipelinesCreateSlackTriggerEndpointResponse(rsp)
+}
+
+func (c *ClientWithResponses) IncidentPipelinesCreateSlackTriggerEndpointWithResponse(ctx context.Context, pipelineId string, body IncidentPipelinesCreateSlackTriggerEndpointJSONRequestBody, reqEditors ...RequestEditorFn) (*IncidentPipelinesCreateSlackTriggerEndpointResponse, error) {
+	rsp, err := c.IncidentPipelinesCreateSlackTriggerEndpoint(ctx, pipelineId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIncidentPipelinesCreateSlackTriggerEndpointResponse(rsp)
+}
+
+// IncidentPipelinesDeleteSlackTriggerEndpointWithResponse request returning *IncidentPipelinesDeleteSlackTriggerEndpointResponse
+func (c *ClientWithResponses) IncidentPipelinesDeleteSlackTriggerEndpointWithResponse(ctx context.Context, pipelineId string, routeId string, reqEditors ...RequestEditorFn) (*IncidentPipelinesDeleteSlackTriggerEndpointResponse, error) {
+	rsp, err := c.IncidentPipelinesDeleteSlackTriggerEndpoint(ctx, pipelineId, routeId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIncidentPipelinesDeleteSlackTriggerEndpointResponse(rsp)
+}
+
 // IncidentPipelinesGetIncidentPipelineStatsEndpointWithResponse request returning *IncidentPipelinesGetIncidentPipelineStatsEndpointResponse
 func (c *ClientWithResponses) IncidentPipelinesGetIncidentPipelineStatsEndpointWithResponse(ctx context.Context, pipelineId string, params *IncidentPipelinesGetIncidentPipelineStatsEndpointParams, reqEditors ...RequestEditorFn) (*IncidentPipelinesGetIncidentPipelineStatsEndpointResponse, error) {
 	rsp, err := c.IncidentPipelinesGetIncidentPipelineStatsEndpoint(ctx, pipelineId, params, reqEditors...)
@@ -88199,6 +88537,98 @@ func ParseIncidentPipelinesPauseIncidentPipelineEndpointResponse(rsp *http.Respo
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest HTTPValidationError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseIncidentPipelinesListSlackTriggersEndpointResponse parses an HTTP response from a IncidentPipelinesListSlackTriggersEndpointWithResponse call
+func ParseIncidentPipelinesListSlackTriggersEndpointResponse(rsp *http.Response) (*IncidentPipelinesListSlackTriggersEndpointResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &IncidentPipelinesListSlackTriggersEndpointResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []SlackTriggerInfo
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest HTTPValidationError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseIncidentPipelinesCreateSlackTriggerEndpointResponse parses an HTTP response from a IncidentPipelinesCreateSlackTriggerEndpointWithResponse call
+func ParseIncidentPipelinesCreateSlackTriggerEndpointResponse(rsp *http.Response) (*IncidentPipelinesCreateSlackTriggerEndpointResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &IncidentPipelinesCreateSlackTriggerEndpointResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest SlackTriggerInfo
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest HTTPValidationError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseIncidentPipelinesDeleteSlackTriggerEndpointResponse parses an HTTP response from a IncidentPipelinesDeleteSlackTriggerEndpointWithResponse call
+func ParseIncidentPipelinesDeleteSlackTriggerEndpointResponse(rsp *http.Response) (*IncidentPipelinesDeleteSlackTriggerEndpointResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &IncidentPipelinesDeleteSlackTriggerEndpointResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
 		var dest HTTPValidationError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
