@@ -7720,6 +7720,29 @@
         "title": "CreateSkillRequest",
         "type": "object"
       },
+      "CreateSlackTriggerRequest": {
+        "properties": {
+          "channel_id": {
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "match_json": {
+            "additionalProperties": true,
+            "title": "Match Json",
+            "type": "object"
+          },
+          "rule_type": {
+            "default": "mention",
+            "title": "Rule Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel_id"
+        ],
+        "title": "CreateSlackTriggerRequest",
+        "type": "object"
+      },
       "CreateWebhookTriggerRequest": {
         "properties": {
           "alert": {
@@ -30413,6 +30436,39 @@
         "title": "SlackDeliveryConfig",
         "type": "object"
       },
+      "SlackTriggerInfo": {
+        "properties": {
+          "channel_id": {
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "match_json": {
+            "additionalProperties": true,
+            "title": "Match Json",
+            "type": "object"
+          },
+          "route_id": {
+            "title": "Route Id",
+            "type": "string"
+          },
+          "rule_type": {
+            "title": "Rule Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "route_id",
+          "channel_id",
+          "rule_type",
+          "is_enabled"
+        ],
+        "title": "SlackTriggerInfo",
+        "type": "object"
+      },
       "SortOrder": {
         "enum": [
           "asc",
@@ -47940,6 +47996,149 @@
           }
         },
         "summary": "Pause Incident Pipeline Endpoint",
+        "tags": [
+          "incident-pipelines"
+        ],
+        "x-agentops-component": "incidents"
+      }
+    },
+    "/api/v1/incident-pipelines/{pipeline_id}/slack-triggers": {
+      "get": {
+        "operationId": "incident-pipelines_list_slack_triggers_endpoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pipeline_id",
+            "required": true,
+            "schema": {
+              "title": "Pipeline Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SlackTriggerInfo"
+                  },
+                  "title": "Response Incident-Pipelines List Slack Triggers Endpoint",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Slack Triggers Endpoint",
+        "tags": [
+          "incident-pipelines"
+        ],
+        "x-agentops-component": "incidents"
+      },
+      "post": {
+        "operationId": "incident-pipelines_create_slack_trigger_endpoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pipeline_id",
+            "required": true,
+            "schema": {
+              "title": "Pipeline Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSlackTriggerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SlackTriggerInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Slack Trigger Endpoint",
+        "tags": [
+          "incident-pipelines"
+        ],
+        "x-agentops-component": "incidents"
+      }
+    },
+    "/api/v1/incident-pipelines/{pipeline_id}/slack-triggers/{route_id}": {
+      "delete": {
+        "operationId": "incident-pipelines_delete_slack_trigger_endpoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pipeline_id",
+            "required": true,
+            "schema": {
+              "title": "Pipeline Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "route_id",
+            "required": true,
+            "schema": {
+              "title": "Route Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Slack Trigger Endpoint",
         "tags": [
           "incident-pipelines"
         ],

@@ -99,6 +99,27 @@ func (c *Client) Post(ctx context.Context, path string) error {
 	return Check(resp, body)
 }
 
+// Do turns one raw generated call — c.Gen.<Op>(...), not <Op>WithResponse — into
+// its body plus the same non-2xx error Check produces. Reach for it when the
+// endpoint declares an error status whose real body does not match the schema:
+// oapi-codegen's typed wrapper discards the whole response, status and body
+// included, the moment such a body fails to unmarshal, and FastAPI answers
+// several preconditions with a 422 carrying a plain-string `detail` rather than
+// the validation-error list the spec declares. Through the wrapper those surface
+// as an opaque json error with no status attached; through Do they surface as the
+// APIError they are.
+func Do(resp *http.Response, err error) ([]byte, error) {
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return nil, readErr
+	}
+	return body, Check(resp, body)
+}
+
 // APIError is returned for any non-2xx response. It carries the status code and
 // raw response body so callers (and users) get an actionable message.
 type APIError struct {
@@ -140,6 +161,14 @@ func IsNotFound(err error) bool {
 // on one.
 func IsConflict(err error) bool {
 	return isStatus(err, http.StatusConflict)
+}
+
+// IsUnprocessable reports whether err is an APIError with a 422 status. FastAPI
+// reserves 422 for request-validation errors, so an endpoint that answers one for
+// an unmet precondition is doing it in passing; callers must match on the body
+// before acting on one.
+func IsUnprocessable(err error) bool {
+	return isStatus(err, http.StatusUnprocessableEntity)
 }
 
 func isStatus(err error, code int) bool {

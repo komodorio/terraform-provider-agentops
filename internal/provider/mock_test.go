@@ -61,6 +61,22 @@ type mockServer struct {
 	chanRoutes  map[string]map[string]map[string]any // channel_id -> route_id -> route
 	hostedAgs   map[string]map[string]any            // "customer/agent_id" -> hosted agent
 	outposts    map[string]map[string]any            // outposts
+	// serverCreds are the credential bindings, keyed by server id. Deliberately not
+	// on the server record: the real GET /servers/{id} does not echo a binding, and
+	// that is the whole reason the resource has to drive it off the plan.
+	serverCreds map[string]map[string]string
+	// slackRoutes are the pipelines' Slack trigger routes, keyed pipeline id ->
+	// route id. Separate from the pipeline record because the create response is a
+	// SlackTriggerInfo, not a pipeline, and the only read is the per-pipeline list.
+	slackRoutes map[string]map[string]map[string]any
+	// integrationInactive makes every integration connection this server creates land
+	// not-active, so PUT /servers/{id}/credential refuses it the way the real route
+	// refuses a connection whose OAuth has lapsed.
+	integrationInactive bool
+	// noSlackConnector mirrors an account with no active Slack connector, the
+	// prerequisite for a Slack trigger. 422 with the control plane's own garbled
+	// serializer message, which is what a deployed instance actually answers.
+	noSlackConnector bool
 	// selfHostedAgs are the agents a self-hosted catalog deploy registers, keyed by
 	// agent id. They live under /api/v1/agents, not /api/v1/hosted-agents.
 	selfHostedAgs map[string]map[string]any
@@ -140,6 +156,8 @@ var (
 var (
 	incidentPipelineIDRe     = regexp.MustCompile(`^/api/v1/incident-pipelines/([^/]+)$`)
 	incidentPipelineActionRe = regexp.MustCompile(`^/api/v1/incident-pipelines/([^/]+)/(activate|pause)$`)
+	slackTriggersRe          = regexp.MustCompile(`^/api/v1/incident-pipelines/([^/]+)/slack-triggers$`)
+	slackTriggerRe           = regexp.MustCompile(`^/api/v1/incident-pipelines/([^/]+)/slack-triggers/([^/]+)$`)
 	reviewWorkflowIDRe       = regexp.MustCompile(`^/api/v1/review-workflows/([^/]+)$`)
 	reviewWorkflowActionRe   = regexp.MustCompile(`^/api/v1/review-workflows/([^/]+)/(activate|pause)$`)
 )
@@ -160,6 +178,7 @@ var (
 	outpostIDRe      = regexp.MustCompile(`^/api/v1/outposts/([^/]+)$`)
 	outpostInstallRe = regexp.MustCompile(`^/api/v1/outposts/([^/]+)/install$`)
 	serverOutpostRe  = regexp.MustCompile(`^/api/v1/gateway/admin/servers/([^/]+)/outpost$`)
+	serverCredRe     = regexp.MustCompile(`^/api/v1/gateway/admin/servers/([^/]+)/credential$`)
 	serverIDRe       = regexp.MustCompile(`^/api/v1/gateway/admin/servers/([^/]+)$`)
 
 	runtimeAgentArchiveRe         = regexp.MustCompile(`^/api/v1/agents/([^/]+)/archive$`)
@@ -192,6 +211,8 @@ func newMockServer(t *testing.T) *mockServer {
 		chanRoutes:     map[string]map[string]map[string]any{},
 		hostedAgs:      map[string]map[string]any{},
 		outposts:       map[string]map[string]any{},
+		serverCreds:    map[string]map[string]string{},
+		slackRoutes:    map[string]map[string]map[string]any{},
 		revokedTokens:  map[string]bool{},
 		deletedAgs:     map[string]bool{},
 		heartbeatedAgs: map[string]bool{},
@@ -285,6 +306,11 @@ func (m *mockServer) handle(w http.ResponseWriter, r *http.Request) {
 	case incidentPipelineActionRe.MatchString(r.URL.Path) && r.Method == http.MethodPost:
 		mm := incidentPipelineActionRe.FindStringSubmatch(r.URL.Path)
 		m.incidentPipelineAction(w, mm[1], mm[2])
+	case slackTriggersRe.MatchString(r.URL.Path):
+		m.slackTriggers(w, r, slackTriggersRe.FindStringSubmatch(r.URL.Path)[1])
+	case slackTriggerRe.MatchString(r.URL.Path) && r.Method == http.MethodDelete:
+		mm := slackTriggerRe.FindStringSubmatch(r.URL.Path)
+		m.slackTriggerDelete(w, mm[1], mm[2])
 	case incidentPipelineIDRe.MatchString(r.URL.Path):
 		m.incidentPipelineByID(w, r, incidentPipelineIDRe.FindStringSubmatch(r.URL.Path)[1])
 
@@ -319,6 +345,10 @@ func (m *mockServer) handle(w http.ResponseWriter, r *http.Request) {
 		m.outpostByID(w, r, outpostIDRe.FindStringSubmatch(r.URL.Path)[1])
 	case serverOutpostRe.MatchString(r.URL.Path):
 		m.serverOutpost(w, r, serverOutpostRe.FindStringSubmatch(r.URL.Path)[1])
+	case serverCredRe.MatchString(r.URL.Path):
+		m.serverCredential(w, r, serverCredRe.FindStringSubmatch(r.URL.Path)[1])
+	case r.URL.Path == "/api/v1/gateway/admin/server-credentials" && r.Method == http.MethodGet:
+		m.listServerCredentials(w)
 	case serverIDRe.MatchString(r.URL.Path) && r.Method == http.MethodPatch && m.serverUpdateDropsOutpost:
 		m.updateServerWithoutOutpost(w, r, serverIDRe.FindStringSubmatch(r.URL.Path)[1])
 
@@ -436,13 +466,17 @@ func (m *mockServer) crudReplaceValue(res *crudResource, w http.ResponseWriter, 
 func (m *mockServer) createConnection(w http.ResponseWriter, r *http.Request) {
 	body := decode(r)
 	id := m.nextID("conn")
+	connStatus := "connected"
+	if m.integrationInactive {
+		connStatus = "expired"
+	}
 	detail := map[string]any{
 		"id":                     id,
 		"auth_config_key":        "acfg_" + id,
 		"external_connection_id": "ext_" + id,
 		"display_name":           body["display_name"],
 		"provider":               body["provider"],
-		"status":                 "connected",
+		"status":                 connStatus,
 		"created_at":             mockTS,
 		"updated_at":             mockTS,
 	}
@@ -453,7 +487,7 @@ func (m *mockServer) createConnection(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"connection_id":   id,
 		"auth_config_key": "acfg_" + id,
-		"status":          "connected",
+		"status":          connStatus,
 	})
 }
 
@@ -820,6 +854,82 @@ func (m *mockServer) incidentPipelineByID(w http.ResponseWriter, r *http.Request
 	}
 }
 
+// slackTriggers lists or creates a pipeline's Slack trigger routes. A pipeline
+// that does not exist 404s, and a listing with no routes is an empty array, not a
+// 404 — both the way the real routes answer.
+func (m *mockServer) slackTriggers(w http.ResponseWriter, r *http.Request, pipelineID string) {
+	if _, ok := m.incidentPls[pipelineID]; !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "incident pipeline not found"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		out := []map[string]any{}
+		for _, route := range m.slackRoutes[pipelineID] {
+			out = append(out, route)
+		}
+		writeJSON(w, http.StatusOK, out)
+	case http.MethodPost:
+		if m.noSlackConnector {
+			// Verbatim what a control plane without the 409 fix answers: the
+			// precondition's message never survives serialization.
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
+				"detail": "dictionary update sequence element #0 has length 1; 2 is required",
+			})
+			return
+		}
+		body := decode(r)
+		routeID := m.nextID("slr")
+		route := map[string]any{
+			"route_id":   routeID,
+			"channel_id": toString(body["channel_id"]),
+			"rule_type":  toString(valueOr(body["rule_type"], "mention")),
+			"match_json": valueOr(body["match_json"], map[string]any{}),
+			"is_enabled": true,
+		}
+		if m.slackRoutes[pipelineID] == nil {
+			m.slackRoutes[pipelineID] = map[string]map[string]any{}
+		}
+		m.slackRoutes[pipelineID][routeID] = route
+		writeJSON(w, http.StatusCreated, route)
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{})
+	}
+}
+
+func (m *mockServer) slackTriggerDelete(w http.ResponseWriter, pipelineID, routeID string) {
+	if _, ok := m.incidentPls[pipelineID]; !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "incident pipeline not found"})
+		return
+	}
+	if _, ok := m.slackRoutes[pipelineID][routeID]; !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "slack trigger route not found"})
+		return
+	}
+	delete(m.slackRoutes[pipelineID], routeID)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// slackTriggerRoutes reports the routes the control plane holds for one pipeline,
+// for assertions the Terraform state cannot make on its own.
+func (m *mockServer) slackTriggerRoutes(pipelineID string) map[string]map[string]any {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := map[string]map[string]any{}
+	for id, route := range m.slackRoutes[pipelineID] {
+		out[id] = cloneMap(route)
+	}
+	return out
+}
+
+// deleteSlackTriggerOutOfBand drops a route behind Terraform's back, the way
+// someone removing it in Slack or by a direct API call would.
+func (m *mockServer) deleteSlackTriggerOutOfBand(pipelineID, routeID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.slackRoutes[pipelineID], routeID)
+}
+
 func (m *mockServer) incidentPipelineAction(w http.ResponseWriter, id, action string) {
 	rec, ok := m.incidentPls[id]
 	if !ok {
@@ -1174,6 +1284,97 @@ func (m *mockServer) serverOutpost(w http.ResponseWriter, r *http.Request, serve
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{})
 	}
+}
+
+// serverCredential binds, rebinds or unbinds an upstream's credential. The PUT is
+// an upsert; the DELETE 404s on a server with no binding, the way the real route
+// does, which is what the resource's already-absent tolerance is measured against.
+func (m *mockServer) serverCredential(w http.ResponseWriter, r *http.Request, serverID string) {
+	if _, ok := m.stores["/api/v1/gateway/admin/servers"][serverID]; !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "server not found"})
+		return
+	}
+	switch r.Method {
+	case http.MethodPut:
+		body := decode(r)
+		source := toString(body["credential_source"])
+		sourceID := toString(body["credential_source_id"])
+		if source != "credential" && source != "integration" {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"detail": "bad credential_source: " + source})
+			return
+		}
+		if source == "credential" {
+			if _, known := m.stores["/api/v1/credentials"][sourceID]; !known {
+				writeJSON(w, http.StatusNotFound, map[string]any{"detail": "credential source not found"})
+				return
+			}
+		} else if conn, known := m.conns[sourceID]; !known {
+			writeJSON(w, http.StatusNotFound, map[string]any{"detail": "credential source not found"})
+			return
+		} else if m.integrationInactive {
+			// The real refusal: a 422 whose detail is a plain string, not the
+			// validation-error list the spec declares for 422 on this route. Anything
+			// reading it through the generated typed wrapper loses status and body both.
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
+				"detail": fmt.Sprintf("integration connection %q is not active (status=%q)", sourceID, toString(conn["status"])),
+			})
+			return
+		}
+		m.serverCreds[serverID] = map[string]string{"credential_source": source, "credential_source_id": sourceID}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"server_id":            serverID,
+			"credential_source":    source,
+			"credential_source_id": sourceID,
+		})
+	case http.MethodDelete:
+		if _, bound := m.serverCreds[serverID]; !bound {
+			writeJSON(w, http.StatusNotFound, map[string]any{"detail": "server credential not found"})
+			return
+		}
+		delete(m.serverCreds, serverID)
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{})
+	}
+}
+
+// listServerCredentials answers the account-wide binding listing, the only read
+// the API exposes for a binding.
+func (m *mockServer) listServerCredentials(w http.ResponseWriter) {
+	out := []map[string]any{}
+	for serverID, b := range m.serverCreds {
+		out = append(out, map[string]any{
+			"server_id":            serverID,
+			"credential_source":    b["credential_source"],
+			"credential_source_id": b["credential_source_id"],
+		})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// serverCredentialBinding reports the binding the control plane holds, for
+// assertions the Terraform state cannot make on its own.
+func (m *mockServer) serverCredentialBinding(serverID string) (source, sourceID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	b := m.serverCreds[serverID]
+	return b["credential_source"], b["credential_source_id"]
+}
+
+// bindServerCredential attaches a binding behind Terraform's back, standing in for
+// one this resource does not own.
+func (m *mockServer) bindServerCredential(serverID, source, sourceID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.serverCreds[serverID] = map[string]string{"credential_source": source, "credential_source_id": sourceID}
+}
+
+// unbindServerCredential drops a binding behind Terraform's back, the way someone
+// detaching it in the UI or by a direct API call would.
+func (m *mockServer) unbindServerCredential(serverID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.serverCreds, serverID)
 }
 
 // updateServerWithoutOutpost patches a server and answers without outpost_id, the

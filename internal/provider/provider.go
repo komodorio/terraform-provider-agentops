@@ -125,6 +125,7 @@ func (p *KomodorAgentOpsProvider) Resources(ctx context.Context) []func() resour
 		NewMCPGatewayGroupResource,
 		NewMCPGatewayPolicyResource,
 		NewIncidentPipelineResource,
+		NewIncidentPipelineSlackTriggerResource,
 		NewReviewWorkflowResource,
 		NewGraderConfigResource,
 		NewChannelResource,
