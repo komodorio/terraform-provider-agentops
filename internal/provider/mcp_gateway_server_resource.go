@@ -114,11 +114,12 @@ func (r *mcpGatewayServerResource) Schema(ctx context.Context, req resource.Sche
 				PlanModifiers:       []planmodifier.Map{mapplanmodifier.UseStateForUnknown()},
 			},
 			"static_headers": schema.MapAttribute{
-				MarkdownDescription: "Headers always sent upstream. Values may embed ${env:VAR} / ${file:path} secret references resolved at connect time.",
-				ElementType:         types.StringType,
-				Optional:            true,
-				Computed:            true,
-				PlanModifiers:       []planmodifier.Map{mapplanmodifier.UseStateForUnknown()},
+				MarkdownDescription: "Headers always sent upstream. Values may embed ${env:VAR}, ${file:path} or " +
+					"${credential:NAME} secret references, resolved at connect time; only the reference is stored.",
+				ElementType:   types.StringType,
+				Optional:      true,
+				Computed:      true,
+				PlanModifiers: []planmodifier.Map{mapplanmodifier.UseStateForUnknown()},
 			},
 			"enabled": schema.BoolAttribute{
 				MarkdownDescription: "Whether the server is enabled.",

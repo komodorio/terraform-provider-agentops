@@ -46,7 +46,7 @@ resource "agentops_mcp_gateway_server" "docs" {
 - `oauth_scopes` (List of String) OAuth scopes to request; empty = server/registration default.
 - `oauth_token_url` (String) Token endpoint for the client_credentials grant.
 - `outpost_id` (String) Outpost whose tunnel reaches this upstream. When set, traffic to this server is routed through the outpost relay instead of a direct dial from the control plane.
-- `static_headers` (Map of String) Headers always sent upstream. Values may embed ${env:VAR} / ${file:path} secret references resolved at connect time.
+- `static_headers` (Map of String) Headers always sent upstream. Values may embed ${env:VAR}, ${file:path} or ${credential:NAME} secret references, resolved at connect time; only the reference is stored.
 - `tags` (List of String) Free-form tags applied to the server.
 - `timeout_seconds` (Number) Upstream connection timeout in seconds.
 - `transport` (String) Transport used to reach the upstream MCP server (`http`, `sse`).
