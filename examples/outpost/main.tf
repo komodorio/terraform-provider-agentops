@@ -1,4 +1,4 @@
-# Baseten POC resource smoke test — agents, outpost, MCP binding.
+# GPU incident-response smoke test — agents, outpost, MCP binding.
 #
 # Prerequisites:
 #   1. Build the provider locally:
