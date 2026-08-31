@@ -4,12 +4,17 @@
 package provider
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
+
+	"github.com/komodorio/terraform-provider-agentops/internal/client"
+	"github.com/komodorio/terraform-provider-agentops/internal/client/gen"
 )
 
 func TestAccAgentResource(t *testing.T) {
@@ -128,6 +133,9 @@ func TestAccAgentResource_deleteGatedByLifecycleFlagFailsLoudly(t *testing.T) {
 				Check:  resource.TestCheckResourceAttr("agentops_agent.test", "agent_id", "incident-responder"),
 			},
 			{
+				// The worker has come online, which puts the agent out of reach of the
+				// draft delete the destroy falls back to.
+				PreConfig:   func() { mock.markAgentHeartbeated("incident-responder") },
 				Config:      testAccAgentConfig(mock.URL, ""),
 				Destroy:     true,
 				ExpectError: regexp.MustCompile("self_hosted_agent_lifecycle"),
@@ -165,6 +173,7 @@ func TestAccAgentResource_deleteOpaque404WithSurvivingAgentFails(t *testing.T) {
 		Steps: []resource.TestStep{
 			{Config: testAccAgentConfig(mock.URL, "")},
 			{
+				PreConfig:   func() { mock.markAgentHeartbeated("incident-responder") },
 				Config:      testAccAgentConfig(mock.URL, ""),
 				Destroy:     true,
 				ExpectError: regexp.MustCompile("still registered"),
@@ -281,6 +290,111 @@ func TestAccAgentResource_mcpGroupBindNotEchoed(t *testing.T) {
 				Check:              resource.TestCheckResourceAttr("agentops_agent.test", "mcp_group_id", "grp_1"),
 				ExpectNonEmptyPlan: true,
 			},
+		},
+	})
+}
+
+// TestAccAgentResource_mcpGroupEmptyStringConverges covers `mcp_group_id = ""` —
+// what `= var.group` produces when the variable defaults to empty. The control
+// plane coerces the empty id to an unbind and reports null on the next read, so
+// a refresh that adopts the observed null verbatim plans null -> "" on every run
+// and the configuration never converges.
+func TestAccAgentResource_mcpGroupEmptyStringConverges(t *testing.T) {
+	mock := newMockServer(t)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccAgentConfigLiteralGroup(mock.URL, ""),
+				Check: func(*terraform.State) error {
+					if got := mock.agentMcpGroup("incident-responder"); got != "" {
+						return fmt.Errorf("control plane bound group %q, want none", got)
+					}
+					return nil
+				},
+			},
+			{
+				Config:   testAccAgentConfigLiteralGroup(mock.URL, ""),
+				PlanOnly: true,
+			},
+		},
+	})
+}
+
+// testAccAgentConfigLiteralGroup always emits mcp_group_id, so a test can set it
+// to "" — the empty string means "omit the attribute" to testAccAgentConfig.
+func testAccAgentConfigLiteralGroup(endpoint, mcpGroup string) string {
+	return mockProviderConfig(endpoint) + fmt.Sprintf(`
+resource "agentops_agent" "test" {
+  agent_id     = "incident-responder"
+  instructions = "Investigate and remediate."
+  mcp_group_id = %q
+}
+`, mcpGroup)
+}
+
+// TestArchiveAndDeleteAgent_gateBodyForAgentThatIsGone pins the order of the two
+// signals the delete discriminator has. The control plane checks the lifecycle
+// gate before it looks the agent up, so a gate-off account answers a delete for an
+// agent that is not there with the very same gate 404 it answers for a live one:
+// deciding on the body alone refuses a destroy that has nothing left to destroy.
+// Not an acceptance test because Terraform's refresh-before-destroy normally reads
+// the 404 and drops the resource before Delete runs; `terraform destroy
+// -refresh=false` reaches this path, and archiveAndDeleteAgent is where it lands.
+func TestArchiveAndDeleteAgent_gateBodyForAgentThatIsGone(t *testing.T) {
+	mock := newMockServer(t)
+	ctx := context.Background()
+
+	cl, err := client.New(mock.URL, "test-key", "test")
+	if err != nil {
+		t.Fatalf("building client: %v", err)
+	}
+	created, err := cl.Gen.AgentsCreateAgentWithResponse(ctx, gen.CreateAgentRequest{
+		AgentId:      "incident-responder",
+		Instructions: "Investigate and remediate.",
+	})
+	if err != nil {
+		t.Fatalf("registering the agent: %v", err)
+	}
+	if created.JSON200 == nil {
+		t.Fatalf("registering the agent: %s", created.Body)
+	}
+	mock.tune(func(m *mockServer) { m.deleteAgentAnswer = deleteAgentGateOnMissing })
+
+	var diags diag.Diagnostics
+	archiveAndDeleteAgent(ctx, cl, "incident-responder", &diags)
+
+	if diags.HasError() {
+		t.Fatalf("destroy of an agent that is already gone failed: %s", diags.Errors())
+	}
+}
+
+// TestAccAgentResource_deleteGatedFallsBackToDraftDelete covers the account
+// self_hosted_agent_lifecycle is off for — the default — holding an agent whose
+// worker never came online. The gated DELETE /agents/{id} 404s, but the draft
+// delete is not behind the feature and the control plane still serves it for an
+// agent that has never heartbeated, so the destroy tears down what the apply
+// created instead of hard-failing until someone turns a feature flag on. An agent
+// that has heartbeated is refused by the control plane, not by this provider —
+// TestAccAgentResource_deleteGatedByLifecycleFlagFailsLoudly is that half.
+func TestAccAgentResource_deleteGatedFallsBackToDraftDelete(t *testing.T) {
+	mock := newMockServer(t)
+	mock.tune(func(m *mockServer) { m.deleteAgentAnswer = deleteAgentLifecycleOff })
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy: func(*terraform.State) error {
+			if got := mock.runtimeAgentCount(); got != 0 {
+				return fmt.Errorf("control plane holds %d agent(s) after the destroy, want 0", got)
+			}
+			return nil
+		},
+		Steps: []resource.TestStep{
+			{Config: testAccAgentConfig(mock.URL, "")},
+			{Config: testAccAgentConfig(mock.URL, ""), Destroy: true},
 		},
 	})
 }

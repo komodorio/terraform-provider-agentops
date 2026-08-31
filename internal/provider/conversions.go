@@ -188,6 +188,13 @@ func reconcileManagedOptional(phase readPhase, planned, observed types.String) t
 	if phase == phaseApply {
 		return planned
 	}
+	// "" is how a configuration spells "no binding" (`= var.group` with an empty
+	// default) and the control plane answers it with null. The attribute is
+	// Optional and not Computed, so the configured "" has to survive the refresh —
+	// adopting the null instead plans null -> "" on every run, for good.
+	if planned.ValueString() == "" && observed.IsNull() {
+		return planned
+	}
 	return observed
 }
 

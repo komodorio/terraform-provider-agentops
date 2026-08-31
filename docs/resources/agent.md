@@ -4,11 +4,14 @@ page_title: "agentops_agent Resource - agentops"
 subcategory: ""
 description: |-
   A self-hosted KaOps agent. Creating this resource registers the agent with the control plane and returns a complete Helm values YAML and install command for deploying it in your own cluster. The install_values output is a ready-to-use values file for the agentops-agent-base Helm chart. Destroying the agent archives it first, then deletes it.
+  Destroying this resource — and any change that forces a new one — needs the self_hosted_agent_lifecycle feature enabled for your AgentOps account once the agent's worker has come online. The feature is off by default. Without it DELETE /agents/{id} is refused, and the provider falls back to the ungated delete, which the control plane serves only for an agent that has never heartbeated. So a registered-but-never-deployed agent destroys cleanly on any account, while one whose worker has heartbeated fails the destroy — and, because every replacement destroys before it creates, fails the replacing apply too, leaving the old agent archived and the new one uncreated. Ask Komodor support or your account admin to enable the feature before tearing down or replacing a deployed agent.
 ---
 
 # agentops_agent (Resource)
 
 A self-hosted KaOps agent. Creating this resource registers the agent with the control plane and returns a complete Helm values YAML and install command for deploying it in your own cluster. The `install_values` output is a ready-to-use values file for the `agentops-agent-base` Helm chart. Destroying the agent archives it first, then deletes it.
+
+**Destroying this resource — and any change that forces a new one — needs the `self_hosted_agent_lifecycle` feature enabled for your AgentOps account once the agent's worker has come online.** The feature is off by default. Without it `DELETE /agents/{id}` is refused, and the provider falls back to the ungated delete, which the control plane serves only for an agent that has never heartbeated. So a registered-but-never-deployed agent destroys cleanly on any account, while one whose worker has heartbeated fails the destroy — and, because every replacement destroys before it creates, fails the replacing apply too, leaving the old agent archived and the new one uncreated. Ask Komodor support or your account admin to enable the feature before tearing down or replacing a deployed agent.
 
 
 

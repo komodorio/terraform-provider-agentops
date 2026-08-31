@@ -6,10 +6,13 @@ package provider
 import (
 	"fmt"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
+
+	"github.com/komodorio/terraform-provider-agentops/internal/client/gen"
 )
 
 // TestAccSelfHostedCatalogDeploymentResource covers deploy (create), read-back and
@@ -87,6 +90,33 @@ func TestAccSelfHostedCatalogDeploymentResource_partialSuccess(t *testing.T) {
 	})
 }
 
+// TestAccSelfHostedCatalogDeploymentResource_partialSuccessBothKinds is the same
+// contract when a settings field and a trigger both fail. Two failures are still
+// a partial success — the agent and its token exist — and mcp_group_id must reach
+// state as planned so the next plan re-binds it in place.
+func TestAccSelfHostedCatalogDeploymentResource_partialSuccessBothKinds(t *testing.T) {
+	mock := newMockServer(t)
+	mock.tune(func(m *mockServer) {
+		m.selfHostedTriggerFails = true
+		m.selfHostedMcpGroupFails = true
+	})
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccSelfHostedCatalogDeploymentMcpConfig(mock.URL, "grp_1"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("agentops_self_hosted_catalog_deployment.test", "token", "wt_prod-ddog-self_secret"),
+					resource.TestCheckResourceAttr("agentops_self_hosted_catalog_deployment.test", "mcp_group_id", "grp_1"),
+				),
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
 func testAccSelfHostedCatalogDeploymentConfig(endpoint string) string {
 	return mockProviderConfig(endpoint) + `
 resource "agentops_self_hosted_catalog_deployment" "test" {
@@ -147,6 +177,9 @@ func TestAccSelfHostedCatalogDeploymentResource_deleteGatedByLifecycleFlag(t *te
 				Check:  resource.TestCheckResourceAttr("agentops_self_hosted_catalog_deployment.test", "agent_id", "prod-ddog-self"),
 			},
 			{
+				// The worker has come online, which puts the agent out of reach of the
+				// draft delete the destroy falls back to.
+				PreConfig:   func() { mock.markAgentHeartbeated("prod-ddog-self") },
 				Config:      testAccSelfHostedCatalogDeploymentConfig(mock.URL),
 				Destroy:     true,
 				ExpectError: regexp.MustCompile("self_hosted_agent_lifecycle"),
@@ -223,6 +256,31 @@ func TestAccSelfHostedCatalogDeploymentResource_mcpGroupLifecycle(t *testing.T) 
 					},
 				),
 			},
+		},
+	})
+}
+
+// TestAccSelfHostedCatalogDeploymentResource_mcpGroupEmptyStringConverges is the
+// sibling of the agent resource's case: `= var.group` with an empty default sends
+// "", the control plane coerces it to an unbind and reports null, and a refresh
+// that adopts that null plans null -> "" on every run.
+func TestAccSelfHostedCatalogDeploymentResource_mcpGroupEmptyStringConverges(t *testing.T) {
+	mock := newMockServer(t)
+
+	config := mockProviderConfig(mock.URL) + `
+resource "agentops_self_hosted_catalog_deployment" "test" {
+  catalog_id   = "datadog-investigator"
+  agent_id     = "prod-ddog-self"
+  mcp_group_id = ""
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{Config: config},
+			{Config: config, PlanOnly: true},
 		},
 	})
 }
@@ -344,4 +402,42 @@ func TestAccSelfHostedCatalogDeploymentResource_mcpGroupAbsentIgnoresForeignBind
 			},
 		},
 	})
+}
+
+// TestSelfHostedDeployPartialDetail_bothSections covers the 207 that failed a
+// settings field and a trigger at once. The two halves need different advice —
+// a settings field re-binds on the next plan, a trigger never does — so a
+// rendering that drops one of them tells the operator the wrong thing about the
+// other. Not an acceptance test: a warning is not assertable through
+// terraform-plugin-testing, and this is a pure function over the response.
+func TestSelfHostedDeployPartialDetail_bothSections(t *testing.T) {
+	failedSection := gen.AgentSettingsApplyStatus("failed")
+	failedTrigger := gen.CreateAgentTriggerStatus("failed")
+	sectionRetry := "PATCH /api/v1/agents/ag_1/mcp-group"
+	triggerRetry := "POST /api/v1/agents/ag_1/triggers"
+	sectionErr := "mcp group could not be bound"
+	triggerErr := "cron rejected"
+	triggerName := "nightly"
+
+	detail := selfHostedDeployPartialDetail(&gen.WorkerCatalogSelfHostedDeployResponse{
+		AgentId: "ag_1",
+		Settings: &gen.AgentSettingsResponse{Sections: &[]gen.AgentSettingsSectionResult{{
+			Section: "mcp_group_id", Status: failedSection, Error: &sectionErr, Retry: &sectionRetry,
+		}}},
+		Triggers: &[]gen.CreateAgentTriggerResult{{
+			Name: &triggerName, Type: gen.CreateAgentTriggerResultType("schedule"),
+			Status: failedTrigger, Error: &triggerErr, Retry: &triggerRetry,
+		}},
+	})
+
+	for _, want := range []string{
+		"these settings were not applied",
+		`- setting "mcp_group_id": ` + sectionErr + " (retry: " + sectionRetry + ")",
+		"these triggers were not",
+		`- schedule trigger "nightly": ` + triggerErr + " (retry: " + triggerRetry + ")",
+	} {
+		if !strings.Contains(detail, want) {
+			t.Errorf("partial-deploy detail is missing %q:\n%s", want, detail)
+		}
+	}
 }

@@ -8,6 +8,7 @@ description: |-
   Unlike agentops_agent, this endpoint returns no rendered Helm values: the chart coordinates come from the catalog entry (see the agentops_worker_catalog data source) and the token is supplied separately.
   Authentication: the self-hosted deploy endpoint requires a user-bound API key (a PAT). A service-account token is rejected with 403, so configure the provider with a personal API key for this resource.
   Deploy-time inputs are write-only (the API does not return them), so out-of-band changes to them are not detected, and changing any of them forces a new deployment — which mints a new worker token and invalidates the secret already applied to the cluster. This resource does not support import: the originating catalog_id and the once-only token cannot be recovered from the API.
+  Destroying this resource — and any change that forces a new one — needs the self_hosted_agent_lifecycle feature enabled for your AgentOps account once the agent's worker has come online. The feature is off by default. Without it DELETE /agents/{id} is refused, and the provider falls back to the ungated delete, which the control plane serves only for an agent that has never heartbeated. So a registered-but-never-deployed agent destroys cleanly on any account, while one whose worker has heartbeated fails the destroy — and, because every replacement destroys before it creates, fails the replacing apply too, leaving the old agent archived and the new one uncreated. Ask Komodor support or your account admin to enable the feature before tearing down or replacing a deployed agent.
 ---
 
 # agentops_self_hosted_catalog_deployment (Resource)
@@ -21,6 +22,8 @@ Unlike `agentops_agent`, this endpoint returns no rendered Helm values: the char
 **Authentication:** the self-hosted deploy endpoint requires a user-bound API key (a PAT). A service-account token is rejected with `403`, so configure the provider with a personal API key for this resource.
 
 Deploy-time inputs are write-only (the API does not return them), so out-of-band changes to them are not detected, and changing any of them forces a new deployment — which mints a **new** worker token and invalidates the secret already applied to the cluster. This resource does not support import: the originating `catalog_id` and the once-only token cannot be recovered from the API.
+
+**Destroying this resource — and any change that forces a new one — needs the `self_hosted_agent_lifecycle` feature enabled for your AgentOps account once the agent's worker has come online.** The feature is off by default. Without it `DELETE /agents/{id}` is refused, and the provider falls back to the ungated delete, which the control plane serves only for an agent that has never heartbeated. So a registered-but-never-deployed agent destroys cleanly on any account, while one whose worker has heartbeated fails the destroy — and, because every replacement destroys before it creates, fails the replacing apply too, leaving the old agent archived and the new one uncreated. Ask Komodor support or your account admin to enable the feature before tearing down or replacing a deployed agent.
 
 ## Example Usage
 

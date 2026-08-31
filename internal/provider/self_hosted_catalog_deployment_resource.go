@@ -82,7 +82,8 @@ func (r *selfHostedCatalogDeploymentResource) Schema(ctx context.Context, req re
 			"Deploy-time inputs are write-only (the API does not return them), so out-of-band changes to them " +
 			"are not detected, and changing any of them forces a new deployment — which mints a **new** worker " +
 			"token and invalidates the secret already applied to the cluster. This resource does not support " +
-			"import: the originating `catalog_id` and the once-only token cannot be recovered from the API.",
+			"import: the originating `catalog_id` and the once-only token cannot be recovered from the API.\n\n" +
+			agentLifecycleGateNote,
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Opaque identifier of the registered self-hosted agent, assigned by the " +

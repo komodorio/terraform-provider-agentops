@@ -106,6 +106,11 @@ type mockServer struct {
 	// deleteAgentAnswer overrides how DELETE /agents/{id} answers; see the
 	// deleteAgentMode constants. Empty is the normal 204.
 	deleteAgentAnswer deleteAgentMode
+	// heartbeatedAgs are the self-hosted agents whose worker has come online at
+	// least once. The draft delete — the only one not behind the lifecycle feature
+	// — refuses them, so this is what separates an agent Terraform can still tear
+	// down on a gate-off account from one it cannot.
+	heartbeatedAgs map[string]bool
 	// deletedAgs are the self-hosted agents a delete removed. Without it an unknown
 	// id falls through to the synthesized hosted-runtime record below and reads 200
 	// forever, so a deleted agent would still look alive.
@@ -150,6 +155,7 @@ var (
 	workerCatalogDeployRe = regexp.MustCompile(`^/api/v1/worker-catalog/([^/]+)/deploy$`)
 
 	agentMcpGroupRe = regexp.MustCompile(`^/api/v1/agents/([^/]+)/mcp-group$`)
+	agentDraftRe    = regexp.MustCompile(`^/api/v1/agents/([^/]+)/draft$`)
 
 	outpostIDRe      = regexp.MustCompile(`^/api/v1/outposts/([^/]+)$`)
 	outpostInstallRe = regexp.MustCompile(`^/api/v1/outposts/([^/]+)/install$`)
@@ -171,24 +177,25 @@ func (m *mockServer) tune(fn func(*mockServer)) {
 func newMockServer(t *testing.T) *mockServer {
 	t.Helper()
 	m := &mockServer{
-		triggers:      map[string]map[string]any{},
-		apiKeys:       map[string]map[string]any{},
-		schedules:     map[string]map[string]any{},
-		serviceAccs:   map[string]map[string]any{},
-		policies:      map[string]map[string]any{},
-		conns:         map[string]map[string]any{},
-		bindings:      map[string]map[string]map[string]any{},
-		kbAgents:      map[string]map[string]map[string]any{},
-		stores:        map[string]map[string]map[string]any{},
-		incidentPls:   map[string]map[string]any{},
-		reviewWfs:     map[string]map[string]any{},
-		channels:      map[string]map[string]any{},
-		chanRoutes:    map[string]map[string]map[string]any{},
-		hostedAgs:     map[string]map[string]any{},
-		outposts:      map[string]map[string]any{},
-		revokedTokens: map[string]bool{},
-		deletedAgs:    map[string]bool{},
-		selfHostedAgs: map[string]map[string]any{},
+		triggers:       map[string]map[string]any{},
+		apiKeys:        map[string]map[string]any{},
+		schedules:      map[string]map[string]any{},
+		serviceAccs:    map[string]map[string]any{},
+		policies:       map[string]map[string]any{},
+		conns:          map[string]map[string]any{},
+		bindings:       map[string]map[string]map[string]any{},
+		kbAgents:       map[string]map[string]map[string]any{},
+		stores:         map[string]map[string]map[string]any{},
+		incidentPls:    map[string]map[string]any{},
+		reviewWfs:      map[string]map[string]any{},
+		channels:       map[string]map[string]any{},
+		chanRoutes:     map[string]map[string]map[string]any{},
+		hostedAgs:      map[string]map[string]any{},
+		outposts:       map[string]map[string]any{},
+		revokedTokens:  map[string]bool{},
+		deletedAgs:     map[string]bool{},
+		heartbeatedAgs: map[string]bool{},
+		selfHostedAgs:  map[string]map[string]any{},
 	}
 	for _, res := range crudRegistry {
 		m.stores[res.collection] = map[string]map[string]any{}
@@ -319,6 +326,8 @@ func (m *mockServer) handle(w http.ResponseWriter, r *http.Request) {
 		m.createRuntimeAgent(w, r)
 	case agentMcpGroupRe.MatchString(r.URL.Path) && r.Method == http.MethodPatch:
 		m.setAgentMcpGroup(w, r, agentMcpGroupRe.FindStringSubmatch(r.URL.Path)[1])
+	case agentDraftRe.MatchString(r.URL.Path) && r.Method == http.MethodDelete:
+		m.deleteRuntimeAgentDraft(w, agentDraftRe.FindStringSubmatch(r.URL.Path)[1])
 
 	case r.URL.Path == "/api/v1/hosted-agents" && r.Method == http.MethodPost:
 		m.createHostedAgent(w, r)
@@ -1264,9 +1273,11 @@ func (m *mockServer) setAgentMcpGroup(w http.ResponseWriter, r *http.Request, ag
 		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "agent not found"})
 		return
 	}
-	if v := decode(r)["mcp_group_id"]; v != nil && !m.mcpGroupBindSilent {
+	// The control plane coerces the request through `mcp_group_id or None`, so an
+	// empty id is an unbind and every later read reports null rather than "".
+	if v := decode(r)["mcp_group_id"]; v != nil && v != "" && !m.mcpGroupBindSilent {
 		rec["mcp_group_id"] = v
-	} else if v == nil {
+	} else if v == nil || v == "" {
 		delete(rec, "mcp_group_id")
 	}
 	writeJSON(w, http.StatusOK, rec)
@@ -1402,9 +1413,11 @@ func (m *mockServer) deployWorkerCatalog(w http.ResponseWriter, r *http.Request,
 }
 
 // selfHostedDeployWorkerCatalog mints a worker token for a catalog entry the
-// operator will run themselves. With selfHostedTriggerFails set it answers 207,
-// the partial success the real endpoint returns when the agent was created but a
-// requested trigger was not.
+// operator will run themselves. With selfHostedTriggerFails or
+// selfHostedMcpGroupFails set it answers 207, the partial success the real
+// endpoint returns when the agent was created but something it asked for was not.
+// Both may be set at once, which is what the real endpoint does when a settings
+// field and a trigger both fail.
 func (m *mockServer) selfHostedDeployWorkerCatalog(w http.ResponseWriter, r *http.Request, catalogID string) {
 	body := decode(r)
 	// The friendly slug defaults to the catalog entry's own id, and the response
@@ -1437,8 +1450,6 @@ func (m *mockServer) selfHostedDeployWorkerCatalog(w http.ResponseWriter, r *htt
 			"error":   "mcp group could not be bound",
 			"retry":   "PATCH /api/v1/agents/" + opaqueID + "/mcp-group",
 		}}}
-		writeJSON(w, http.StatusMultiStatus, rec)
-		return
 	}
 	if m.selfHostedTriggerFails {
 		rec["triggers"] = []any{map[string]any{
@@ -1448,6 +1459,8 @@ func (m *mockServer) selfHostedDeployWorkerCatalog(w http.ResponseWriter, r *htt
 			"error":  "cron rejected",
 			"retry":  "POST /api/v1/agents/" + opaqueID + "/triggers",
 		}}
+	}
+	if m.selfHostedMcpGroupFails || m.selfHostedTriggerFails {
 		writeJSON(w, http.StatusMultiStatus, rec)
 		return
 	}
@@ -1488,6 +1501,11 @@ const (
 	// deleteAgentAlreadyGone is the genuine race: the record is gone and the delete
 	// 404s, which a destroy must keep accepting silently.
 	deleteAgentAlreadyGone deleteAgentMode = "already_gone"
+	// deleteAgentGateOnMissing is both at once: the control plane checks the gate
+	// before it looks the agent up, so an agent that is not there gets the same
+	// gate 404 as a live one. The record is dropped before the answer, so the
+	// follow-up read 404s and the destroy has nothing left to do.
+	deleteAgentGateOnMissing deleteAgentMode = "gate_on_missing"
 )
 
 func (m *mockServer) deleteRuntimeAgent(w http.ResponseWriter, agentID string) {
@@ -1498,7 +1516,52 @@ func (m *mockServer) deleteRuntimeAgent(w http.ResponseWriter, agentID string) {
 	case deleteAgentOpaque404:
 		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "Not Found"})
 		return
+	case deleteAgentGateOnMissing:
+		m.forgetRuntimeAgent(agentID)
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "self-hosted agent lifecycle is not enabled for this account"})
+		return
 	}
+	m.forgetRuntimeAgent(agentID)
+	if m.deleteAgentAnswer == deleteAgentAlreadyGone {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "agent not found"})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// deleteRuntimeAgentDraft serves DELETE /agents/{id}/draft, the delete that is not
+// behind self_hosted_agent_lifecycle. It hard-deletes an agent that has never
+// heartbeated and 409s for one that has.
+func (m *mockServer) deleteRuntimeAgentDraft(w http.ResponseWriter, agentID string) {
+	if m.deletedAgs[agentID] {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "agent not found"})
+		return
+	}
+	if m.heartbeatedAgs[agentID] {
+		writeJSON(w, http.StatusConflict, map[string]any{"detail": "agent is not a draft"})
+		return
+	}
+	m.forgetRuntimeAgent(agentID)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// markAgentHeartbeated stands in for a worker that has come online, which puts the
+// agent out of reach of the draft delete. Marked under every key the record
+// answers to, since a caller may hold either the slug or the opaque id.
+func (m *mockServer) markAgentHeartbeated(agentID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.heartbeatedAgs[agentID] = true
+	if rec, ok := m.selfHostedAgs[agentID]; ok {
+		m.heartbeatedAgs[toString(rec["id_slug"])] = true
+		m.heartbeatedAgs[toString(rec["agent_id"])] = true
+	}
+}
+
+// forgetRuntimeAgent drops a self-hosted agent under every key it answers to and
+// remembers it as deleted, so a later read 404s instead of falling through to the
+// synthesized record. Called with m.mu already held by the handler.
+func (m *mockServer) forgetRuntimeAgent(agentID string) {
 	if rec, ok := m.selfHostedAgs[agentID]; ok {
 		delete(m.selfHostedAgs, toString(rec["id_slug"]))
 		delete(m.selfHostedAgs, toString(rec["agent_id"]))
@@ -1506,11 +1569,6 @@ func (m *mockServer) deleteRuntimeAgent(w http.ResponseWriter, agentID string) {
 		m.deletedAgs[toString(rec["agent_id"])] = true
 	}
 	m.deletedAgs[agentID] = true
-	if m.deleteAgentAnswer == deleteAgentAlreadyGone {
-		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "agent not found"})
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (m *mockServer) hostedAgentByPath(w http.ResponseWriter, r *http.Request, customer, agentID string) {

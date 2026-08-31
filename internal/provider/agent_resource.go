@@ -63,7 +63,8 @@ func (r *agentResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 		MarkdownDescription: "A self-hosted KaOps agent. Creating this resource registers the agent with the " +
 			"control plane and returns a complete Helm values YAML and install command for deploying it " +
 			"in your own cluster. The `install_values` output is a ready-to-use values file for the " +
-			"`agentops-agent-base` Helm chart. Destroying the agent archives it first, then deletes it.",
+			"`agentops-agent-base` Helm chart. Destroying the agent archives it first, then deletes it.\n\n" +
+			agentLifecycleGateNote,
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Internal agent identifier assigned by the control plane.",
@@ -311,10 +312,11 @@ func archiveAndDeleteAgent(ctx context.Context, cl *client.Client, agentID strin
 	}
 	if delErr := client.Check(delResp.HTTPResponse, delResp.Body); delErr != nil {
 		if client.IsNotFound(delErr) {
-			if cause := agentDeleteRefusedCause(ctx, cl, agentID, string(delResp.Body)); cause != "" {
-				diags.AddError(agentDeleteGatedSummary, agentDeleteGatedDetail(agentID, cause, string(delResp.Body)))
+			cause := agentDeleteRefusedCause(ctx, cl, agentID, string(delResp.Body))
+			if cause == "" || deleteAgentDraft(ctx, cl, agentID) {
 				return
 			}
+			diags.AddError(agentDeleteGatedSummary, agentDeleteGatedDetail(agentID, cause, string(delResp.Body)))
 			return
 		}
 		if client.IsConflict(delErr) && strings.Contains(delErr.Error(), "online workers") {
@@ -325,6 +327,18 @@ func archiveAndDeleteAgent(ctx context.Context, cl *client.Client, agentID strin
 		diags.AddError("Error deleting agent", delErr.Error())
 	}
 }
+
+// agentLifecycleGateNote documents the destroy contract on every resource that
+// owns a self-hosted agent record, so the generated docs say the same thing in
+// each place.
+const agentLifecycleGateNote = "**Destroying this resource — and any change that forces a new one — needs the " +
+	"`self_hosted_agent_lifecycle` feature enabled for your AgentOps account once the agent's worker has come " +
+	"online.** The feature is off by default. Without it `DELETE /agents/{id}` is refused, and the provider falls " +
+	"back to the ungated delete, which the control plane serves only for an agent that has never heartbeated. So a " +
+	"registered-but-never-deployed agent destroys cleanly on any account, while one whose worker has heartbeated " +
+	"fails the destroy — and, because every replacement destroys before it creates, fails the replacing apply too, " +
+	"leaving the old agent archived and the new one uncreated. Ask Komodor support or your account admin to enable " +
+	"the feature before tearing down or replacing a deployed agent."
 
 const agentDeleteGatedSummary = "Agent was not deleted — DELETE returned 404 but the agent still exists"
 
@@ -339,31 +353,52 @@ var lifecycleGateHints = []string{"lifecycle is not enabled", "self-hosted agent
 // rather than "already gone", or "" when the agent really is gone. The delete route
 // is feature-gated and answers 404 when the gate is shut, so taking every 404 as
 // success drops a live agent — still registered, still holding a worker token — out
-// of Terraform state. The read path is never gated, so a follow-up GET is the
-// authoritative discriminator; the body match is the fallback for when that GET
-// cannot be completed.
+// of Terraform state. The read path is never gated, so a completed GET settles it;
+// the gate wording in the body only picks which cause to report. The control plane
+// checks the gate before it looks the agent up, so the body says "gate shut" even
+// for an agent that does not exist — reading it first refuses a destroy that has
+// nothing left to destroy.
 func agentDeleteRefusedCause(ctx context.Context, cl *client.Client, agentID, body string) string {
+	presence := readAgentPresence(ctx, cl, agentID)
+	if presence == agentPresenceGone {
+		return ""
+	}
 	lower := strings.ToLower(body)
 	for _, hint := range lifecycleGateHints {
 		if strings.Contains(lower, hint) {
 			return "The control plane reported that the self-hosted agent lifecycle feature is not enabled for this account."
 		}
 	}
-	if agentExists(ctx, cl, agentID) {
+	if presence == agentPresenceAlive {
 		return "The delete returned 404, but a follow-up read shows the agent is still registered."
 	}
 	return ""
 }
 
-// agentExists reports whether GET /agents/{id} still serves the record. Only a
-// clean 2xx counts: an unreachable or refused read is not evidence either way, and
-// must not be turned into a destroy failure.
-func agentExists(ctx context.Context, cl *client.Client, agentID string) bool {
+// agentPresence is what a follow-up GET /agents/{id} could establish. A read that
+// could not be completed is evidence of neither, and must not on its own turn a
+// destroy into a failure.
+type agentPresence int
+
+const (
+	agentPresenceUnknown agentPresence = iota
+	agentPresenceGone
+	agentPresenceAlive
+)
+
+func readAgentPresence(ctx context.Context, cl *client.Client, agentID string) agentPresence {
 	apiResp, err := cl.Gen.AgentsGetAgentWithResponse(ctx, agentID)
 	if err != nil {
-		return false
+		return agentPresenceUnknown
 	}
-	return client.Check(apiResp.HTTPResponse, apiResp.Body) == nil
+	switch checkErr := client.Check(apiResp.HTTPResponse, apiResp.Body); {
+	case checkErr == nil:
+		return agentPresenceAlive
+	case client.IsNotFound(checkErr):
+		return agentPresenceGone
+	default:
+		return agentPresenceUnknown
+	}
 }
 
 func agentDeleteGatedDetail(agentID, cause, body string) string {
@@ -372,12 +407,26 @@ func agentDeleteGatedDetail(agentID, cause, body string) string {
 		"Terraform has kept the resource in state, so nothing is orphaned yet — but do not remove it from state and re-apply "+
 		"with the same agent id: that adopts the surviving agent and rotates its worker token, invalidating the Kubernetes "+
 		"secret already deployed in your cluster.\n\n"+
-		"To recover:\n"+
-		"  1. Have the self_hosted_agent_lifecycle feature enabled for your AgentOps account (Komodor support or your account "+
-		"admin), then re-run 'terraform destroy'.\n"+
-		"  2. Or delete agent %[2]s by hand in AgentOps, then re-run 'terraform destroy' — the destroy then succeeds because "+
-		"the agent really is gone.\n\n"+
+		"To recover, have the self_hosted_agent_lifecycle feature enabled for your AgentOps account (Komodor support or your "+
+		"account admin), then re-run 'terraform destroy'.\n\n"+
+		"There is nothing to try by hand first. The only delete AgentOps offers outside that feature — the one the UI's "+
+		"delete button calls — removes a draft agent that has never heartbeated, and refuses one whose worker has come "+
+		"online. This provider already tried it for agent %[2]s and it did not apply.\n\n"+
 		"API response: %[3]s", cause, agentID, body)
+}
+
+// deleteAgentDraft is the one delete AgentOps serves without the
+// self_hosted_agent_lifecycle feature: it hard-deletes an agent that has never
+// heartbeated and 409s for one that has, so the control plane — not a guess made
+// here — decides whether a live agent is in reach. Tried only after the gated
+// delete has refused and a read has confirmed the agent survived, and reports
+// whether the agent is now gone.
+func deleteAgentDraft(ctx context.Context, cl *client.Client, agentID string) bool {
+	draftResp, err := cl.Gen.AgentsDeleteDraftWithResponse(ctx, agentID)
+	if err != nil {
+		return false
+	}
+	return client.Check(draftResp.HTTPResponse, draftResp.Body) == nil
 }
 
 func (r *agentResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
