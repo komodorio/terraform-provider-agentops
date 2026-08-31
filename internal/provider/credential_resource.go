@@ -250,9 +250,13 @@ func (r *credentialResource) Update(ctx context.Context, req resource.UpdateRequ
 			resp.Diagnostics.AddError("Error re-reading credential after value replace", err.Error())
 			return
 		}
-		if rereadResp.JSON200 != nil {
-			meta = rereadResp.JSON200
+		// Falling back to the pre-replace metadata here would record a stale
+		// active_version and last_replaced_at for a rotation that succeeded.
+		if rereadResp.JSON200 == nil {
+			resp.Diagnostics.AddError("Error re-reading credential after value replace", "API returned an empty body")
+			return
 		}
+		meta = rereadResp.JSON200
 	}
 
 	// value is write-only; keep the (possibly new) value from the plan.

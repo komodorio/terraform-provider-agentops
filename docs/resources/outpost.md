@@ -21,9 +21,9 @@ An outpost that proxies agent traffic from a remote network.
 
 ### Optional
 
-- `allowlist` (Attributes List) Upstream endpoints the outpost is allowed to reach. (see [below for nested schema](#nestedatt--allowlist))
-- `description` (String) Free-form description.
-- `labels` (Map of String) Arbitrary key/value labels.
+- `allowlist` (Attributes List) Upstream endpoints the outpost is allowed to reach. Replaced wholesale on every apply: removing the blocks (or setting `allowlist = []`) clears the allowlist, which leaves the outpost able to reach nothing. (see [below for nested schema](#nestedatt--allowlist))
+- `description` (String) Free-form description. Removing it from config clears the stored description.
+- `labels` (Map of String) Arbitrary key/value labels. Replaced wholesale on every apply: removing the map (or setting `labels = {}`) clears them.
 
 ### Read-Only
 

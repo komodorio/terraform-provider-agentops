@@ -216,11 +216,12 @@ func (r *selfHostedCatalogDeploymentResource) Create(ctx context.Context, req re
 	plan.ID = types.StringValue(deployed.AgentId)
 	plan.Token = types.StringValue(deployed.Token)
 	plan.WorkerTokenHint = types.StringValue(deployed.WorkerTokenHint)
+	// token is returned once and never again: from here on every path has to end
+	// at State.Set, or a failed read makes an existing worker's token
+	// unrecoverable and the agent has to be deleted and redeployed.
+	selfHostedResolveComputed(&plan, nil)
 
 	r.refreshAgent(ctx, &plan, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
 	if plan.AgentID.IsNull() || plan.AgentID.IsUnknown() {
 		plan.AgentID = types.StringValue(deployed.AgentId)
 	}
@@ -289,10 +290,8 @@ func (r *selfHostedCatalogDeploymentResource) Update(ctx context.Context, req re
 		}
 	}
 
+	selfHostedResolveComputed(&plan, &state)
 	r.refreshAgent(ctx, &plan, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -304,6 +303,30 @@ func (r *selfHostedCatalogDeploymentResource) Delete(ctx context.Context, req re
 	}
 
 	archiveAndDeleteAgent(ctx, r.client, state.ID.ValueString(), &resp.Diagnostics)
+}
+
+// selfHostedResolveComputed makes every attribute the post-mutation read would
+// fill known before it runs — from prior state on update, null on create. The
+// read is deliberately soft, and an unknown left in state is rejected as an
+// inconsistent apply result, which on create would lose the once-only token.
+func selfHostedResolveComputed(m *selfHostedCatalogDeploymentResourceModel, prior *selfHostedCatalogDeploymentResourceModel) {
+	priorStatus, priorName, priorCreatedAt := types.StringNull(), types.StringNull(), types.StringNull()
+	priorArchived := types.BoolNull()
+	if prior != nil {
+		priorStatus, priorName, priorCreatedAt, priorArchived = prior.Status, prior.Name, prior.CreatedAt, prior.IsArchived
+	}
+	if m.Status.IsUnknown() {
+		m.Status = priorStatus
+	}
+	if m.Name.IsUnknown() {
+		m.Name = priorName
+	}
+	if m.CreatedAt.IsUnknown() {
+		m.CreatedAt = priorCreatedAt
+	}
+	if m.IsArchived.IsUnknown() {
+		m.IsArchived = priorArchived
+	}
 }
 
 func (r *selfHostedCatalogDeploymentResource) refreshAgent(ctx context.Context, m *selfHostedCatalogDeploymentResourceModel, diags *diag.Diagnostics) {

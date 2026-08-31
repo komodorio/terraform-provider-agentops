@@ -222,24 +222,23 @@ func (r *mcpGatewayServerResource) Create(ctx context.Context, req resource.Crea
 		return
 	}
 
-	wantOutpost := plan.OutpostID
+	wantOutpost := normalizeOptionalString(plan.OutpostID)
 	resp.Diagnostics.Append(mcpServerApply(ctx, &plan, apiResp.JSON201)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	// The binding is a separate call, so the create response never carries it and
+	// outpost_id is Optional-not-Computed: state has to end up equal to config.
+	plan.OutpostID = wantOutpost
 
-	if !wantOutpost.IsNull() && !wantOutpost.IsUnknown() {
-		bindResp, err := r.client.Gen.GatewayAdminSetServerOutpostWithResponse(ctx, plan.ID.ValueString(),
-			gen.GatewayAdminSetServerOutpostJSONRequestBody{OutpostId: wantOutpost.ValueString()})
-		if err != nil {
-			resp.Diagnostics.AddError("Error binding MCP gateway server to outpost", err.Error())
+	if !wantOutpost.IsNull() {
+		if !r.bindOutpost(ctx, plan.ID.ValueString(), wantOutpost.ValueString(), &resp.Diagnostics) {
+			// The POST above already created the server. Saving state taints the
+			// resource; returning without it orphans a record the next apply duplicates.
+			plan.OutpostID = types.StringNull()
+			resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 			return
 		}
-		if err := client.Check(bindResp.HTTPResponse, bindResp.Body); err != nil {
-			resp.Diagnostics.AddError("Error binding MCP gateway server to outpost", err.Error())
-			return
-		}
-		plan.OutpostID = wantOutpost
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
@@ -291,6 +290,8 @@ func (r *mcpGatewayServerResource) Update(ctx context.Context, req resource.Upda
 		return
 	}
 
+	wantOutpost := normalizeOptionalString(plan.OutpostID)
+
 	body := gen.UpdateServerRequest{
 		Name:              stringToPtr(plan.Name),
 		Url:               stringToPtr(plan.Url),
@@ -338,43 +339,61 @@ func (r *mcpGatewayServerResource) Update(ctx context.Context, req resource.Upda
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	// UpdateServerRequest carries no outpost field, so the response can only echo
+	// the old binding or null; mcpServerApply just overwrote the intended value
+	// with it. Restore the plan before deciding anything, or a response with a
+	// null outpost reads as a removal and deletes a binding nobody touched.
+	plan.OutpostID = wantOutpost
 
 	oldOutpost := state.OutpostID.ValueString()
-	newOutpost := plan.OutpostID.ValueString()
-	if plan.OutpostID.IsNull() || plan.OutpostID.IsUnknown() {
-		newOutpost = ""
-	}
 	if state.OutpostID.IsNull() || state.OutpostID.IsUnknown() {
 		oldOutpost = ""
 	}
+	newOutpost := wantOutpost.ValueString()
 
 	if newOutpost != oldOutpost {
 		if newOutpost == "" {
-			unbindResp, err := r.client.Gen.GatewayAdminDeleteServerOutpostWithResponse(ctx, plan.ID.ValueString())
-			if err != nil {
-				resp.Diagnostics.AddError("Error unbinding MCP gateway server from outpost", err.Error())
-				return
-			}
-			if err := client.Check(unbindResp.HTTPResponse, unbindResp.Body); err != nil && !client.IsNotFound(err) {
-				resp.Diagnostics.AddError("Error unbinding MCP gateway server from outpost", err.Error())
+			if !r.unbindOutpost(ctx, plan.ID.ValueString(), &resp.Diagnostics) {
 				return
 			}
 			plan.OutpostID = types.StringNull()
-		} else {
-			bindResp, err := r.client.Gen.GatewayAdminSetServerOutpostWithResponse(ctx, plan.ID.ValueString(),
-				gen.GatewayAdminSetServerOutpostJSONRequestBody{OutpostId: newOutpost})
-			if err != nil {
-				resp.Diagnostics.AddError("Error binding MCP gateway server to outpost", err.Error())
-				return
-			}
-			if err := client.Check(bindResp.HTTPResponse, bindResp.Body); err != nil {
-				resp.Diagnostics.AddError("Error binding MCP gateway server to outpost", err.Error())
-				return
-			}
+		} else if !r.bindOutpost(ctx, plan.ID.ValueString(), newOutpost, &resp.Diagnostics) {
+			return
 		}
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+}
+
+// bindOutpost routes this server's egress through an outpost tunnel. Reports
+// whether the binding was applied.
+func (r *mcpGatewayServerResource) bindOutpost(ctx context.Context, serverID, outpostID string, diags *diag.Diagnostics) bool {
+	bindResp, err := r.client.Gen.GatewayAdminSetServerOutpostWithResponse(ctx, serverID,
+		gen.GatewayAdminSetServerOutpostJSONRequestBody{OutpostId: outpostID})
+	if err != nil {
+		diags.AddError("Error binding MCP gateway server to outpost", err.Error())
+		return false
+	}
+	if err := client.Check(bindResp.HTTPResponse, bindResp.Body); err != nil {
+		diags.AddError("Error binding MCP gateway server to outpost", err.Error())
+		return false
+	}
+	return true
+}
+
+// unbindOutpost returns this server to a direct dial. Reports whether the
+// binding is gone, treating an already-absent one as success.
+func (r *mcpGatewayServerResource) unbindOutpost(ctx context.Context, serverID string, diags *diag.Diagnostics) bool {
+	unbindResp, err := r.client.Gen.GatewayAdminDeleteServerOutpostWithResponse(ctx, serverID)
+	if err != nil {
+		diags.AddError("Error unbinding MCP gateway server from outpost", err.Error())
+		return false
+	}
+	if err := client.Check(unbindResp.HTTPResponse, unbindResp.Body); err != nil && !client.IsNotFound(err) {
+		diags.AddError("Error unbinding MCP gateway server from outpost", err.Error())
+		return false
+	}
+	return true
 }
 
 func (r *mcpGatewayServerResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {

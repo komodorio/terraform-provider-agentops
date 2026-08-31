@@ -149,3 +149,12 @@ func listToStringSlice(ctx context.Context, list types.List, target **[]string) 
 	*target = &s
 	return diags
 }
+
+// normalizeOptionalString collapses an unknown into a null so an Optional,
+// non-Computed attribute can be written straight back to state.
+func normalizeOptionalString(v types.String) types.String {
+	if v.IsUnknown() {
+		return types.StringNull()
+	}
+	return v
+}

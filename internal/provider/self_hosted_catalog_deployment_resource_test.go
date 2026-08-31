@@ -98,3 +98,32 @@ resource "agentops_self_hosted_catalog_deployment" "test" {
 }
 `
 }
+
+// TestAccSelfHostedCatalogDeploymentResource_readFailureKeepsToken pins the
+// consequence that makes the post-deploy read soft: the token is minted once, so
+// a transient failure reading the agent back must not cost the apply its state.
+// Losing it means the worker can never be installed and the agent has to be
+// deleted and redeployed.
+func TestAccSelfHostedCatalogDeploymentResource_readFailureKeepsToken(t *testing.T) {
+	mock := newMockServer(t)
+	mock.tune(func(m *mockServer) { m.agentReadFails = 1 })
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccSelfHostedCatalogDeploymentConfig(mock.URL),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("agentops_self_hosted_catalog_deployment.test", "id"),
+					resource.TestCheckResourceAttr("agentops_self_hosted_catalog_deployment.test", "token", "wt_prod-ddog-self_secret"),
+					resource.TestCheckResourceAttr("agentops_self_hosted_catalog_deployment.test", "agent_id", "prod-ddog-self"),
+					// The read never landed, so the agent's own fields stay unset
+					// rather than unknown — an unknown here fails the whole apply.
+					resource.TestCheckNoResourceAttr("agentops_self_hosted_catalog_deployment.test", "status"),
+					resource.TestCheckNoResourceAttr("agentops_self_hosted_catalog_deployment.test", "name"),
+				),
+			},
+		},
+	})
+}

@@ -11,8 +11,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -83,14 +81,14 @@ func (r *outpostResource) Schema(ctx context.Context, req resource.SchemaRequest
 				Required:            true,
 			},
 			"description": schema.StringAttribute{
-				MarkdownDescription: "Free-form description.",
+				MarkdownDescription: "Free-form description. Removing it from config clears the stored description.",
 				Optional:            true,
 			},
 			"allowlist": schema.ListNestedAttribute{
-				MarkdownDescription: "Upstream endpoints the outpost is allowed to reach.",
-				Optional:            true,
-				Computed:            true,
-				PlanModifiers:       []planmodifier.List{listplanmodifier.UseStateForUnknown()},
+				MarkdownDescription: "Upstream endpoints the outpost is allowed to reach. Replaced wholesale on " +
+					"every apply: removing the blocks (or setting `allowlist = []`) clears the allowlist, which " +
+					"leaves the outpost able to reach nothing.",
+				Optional: true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"scheme": schema.StringAttribute{
@@ -113,11 +111,10 @@ func (r *outpostResource) Schema(ctx context.Context, req resource.SchemaRequest
 				},
 			},
 			"labels": schema.MapAttribute{
-				MarkdownDescription: "Arbitrary key/value labels.",
-				ElementType:         types.StringType,
-				Optional:            true,
-				Computed:            true,
-				PlanModifiers:       []planmodifier.Map{mapplanmodifier.UseStateForUnknown()},
+				MarkdownDescription: "Arbitrary key/value labels. Replaced wholesale on every apply: removing the " +
+					"map (or setting `labels = {}`) clears them.",
+				ElementType: types.StringType,
+				Optional:    true,
 			},
 			"credential": schema.StringAttribute{
 				MarkdownDescription: "Enrollment credential returned once at creation. Never returned on subsequent reads.",
@@ -162,12 +159,14 @@ func (r *outpostResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
+	wantAllowlist, wantLabels, wantDescription := plan.Allowlist, plan.Labels, plan.Description
+
 	body := gen.CreateOutpostRequest{
 		Name:        plan.Name.ValueString(),
 		Description: stringToPtr(plan.Description),
 	}
 	resp.Diagnostics.Append(outpostAllowlistToRequest(ctx, plan.Allowlist, &body.Allowlist)...)
-	resp.Diagnostics.Append(stringMapToPtr(ctx, plan.Labels, &body.Labels)...)
+	resp.Diagnostics.Append(outpostLabelsToRequest(ctx, plan.Labels, &body.Labels)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -193,6 +192,9 @@ func (r *outpostResource) Create(ctx context.Context, req resource.CreateRequest
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	plan.Allowlist = outpostKeepConfigured(wantAllowlist, plan.Allowlist)
+	plan.Labels = outpostKeepConfiguredMap(wantLabels, plan.Labels)
+	plan.Description = outpostKeepConfiguredString(wantDescription, plan.Description)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
@@ -222,10 +224,14 @@ func (r *outpostResource) Read(ctx context.Context, req resource.ReadRequest, re
 		return
 	}
 
+	priorAllowlist, priorLabels, priorDescription := state.Allowlist, state.Labels, state.Description
 	resp.Diagnostics.Append(outpostApplyDetail(ctx, &state, apiResp.JSON200)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	state.Allowlist = outpostKeepConfigured(priorAllowlist, state.Allowlist)
+	state.Labels = outpostKeepConfiguredMap(priorLabels, state.Labels)
+	state.Description = outpostKeepConfiguredString(priorDescription, state.Description)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -237,12 +243,17 @@ func (r *outpostResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
+	wantAllowlist, wantLabels, wantDescription := plan.Allowlist, plan.Labels, plan.Description
+
+	// Every omitted field means "leave alone" to the API, so a config that drops
+	// one has to send an explicit empty value or the removal is a silent no-op —
+	// the wrong direction for a deny-by-default list.
 	body := gen.UpdateOutpostRequest{
 		Name:        stringToPtr(plan.Name),
-		Description: stringToPtr(plan.Description),
+		Description: outpostStringToRequest(plan.Description),
 	}
 	resp.Diagnostics.Append(outpostAllowlistToRequest(ctx, plan.Allowlist, &body.Allowlist)...)
-	resp.Diagnostics.Append(stringMapToPtr(ctx, plan.Labels, &body.Labels)...)
+	resp.Diagnostics.Append(outpostLabelsToRequest(ctx, plan.Labels, &body.Labels)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -265,6 +276,9 @@ func (r *outpostResource) Update(ctx context.Context, req resource.UpdateRequest
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	plan.Allowlist = outpostKeepConfigured(wantAllowlist, plan.Allowlist)
+	plan.Labels = outpostKeepConfiguredMap(wantLabels, plan.Labels)
+	plan.Description = outpostKeepConfiguredString(wantDescription, plan.Description)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
@@ -290,8 +304,15 @@ func (r *outpostResource) ImportState(ctx context.Context, req resource.ImportSt
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
+// outpostAllowlistToRequest always sets the request field, sending [] for a null
+// config: the API leaves an omitted allowlist alone, so omission cannot clear it.
 func outpostAllowlistToRequest(ctx context.Context, list types.List, target **[]gen.OutpostAllowRule) diag.Diagnostics {
-	if list.IsNull() || list.IsUnknown() {
+	if list.IsUnknown() {
+		return nil
+	}
+	if list.IsNull() {
+		empty := []gen.OutpostAllowRule{}
+		*target = &empty
 		return nil
 	}
 	var rules []outpostAllowRuleModel
@@ -330,6 +351,64 @@ func outpostAllowlistValue(ctx context.Context, rules *[]gen.OutpostAllowRule) (
 		})
 	}
 	return types.ListValueFrom(ctx, outpostAllowRuleObjType, models)
+}
+
+// outpostLabelsToRequest is the labels analogue of outpostAllowlistToRequest.
+func outpostLabelsToRequest(ctx context.Context, m types.Map, target **map[string]string) diag.Diagnostics {
+	if m.IsUnknown() {
+		return nil
+	}
+	if m.IsNull() {
+		empty := map[string]string{}
+		*target = &empty
+		return nil
+	}
+	return stringMapToPtr(ctx, m, target)
+}
+
+// outpostKeepConfigured keeps the configured value when the API answered with an
+// equivalent empty collection, so a null and an explicit [] both round-trip on an
+// Optional, non-Computed attribute instead of planning a diff forever.
+func outpostKeepConfigured(configured, applied types.List) types.List {
+	if configured.IsUnknown() {
+		return applied
+	}
+	if len(applied.Elements()) == 0 && len(configured.Elements()) == 0 {
+		return configured
+	}
+	return applied
+}
+
+// outpostStringToRequest sends "" for a null config so the field is cleared: an
+// omitted one is left alone by the API.
+func outpostStringToRequest(v types.String) *string {
+	if v.IsUnknown() {
+		return nil
+	}
+	s := v.ValueString()
+	return &s
+}
+
+// outpostKeepConfiguredString is the scalar analogue of outpostKeepConfigured.
+func outpostKeepConfiguredString(configured, applied types.String) types.String {
+	if configured.IsUnknown() {
+		return applied
+	}
+	if configured.IsNull() && applied.ValueString() == "" {
+		return configured
+	}
+	return applied
+}
+
+// outpostKeepConfiguredMap is the labels analogue of outpostKeepConfigured.
+func outpostKeepConfiguredMap(configured, applied types.Map) types.Map {
+	if configured.IsUnknown() {
+		return applied
+	}
+	if len(applied.Elements()) == 0 && len(configured.Elements()) == 0 {
+		return configured
+	}
+	return applied
 }
 
 func outpostApplyDetail(ctx context.Context, m *outpostResourceModel, detail *gen.OutpostDetail) diag.Diagnostics {

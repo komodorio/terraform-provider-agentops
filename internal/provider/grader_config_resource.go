@@ -41,33 +41,41 @@ func (r *graderConfigResource) Schema(ctx context.Context, req resource.SchemaRe
 			"another agent's runs for quality.\n\n**Deprecated:** the underlying API has been removed.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Computed:      true,
-				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+				MarkdownDescription: "Grader configuration identifier.",
+				Computed:            true,
+				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"target_agent_id": schema.StringAttribute{
-				Required:      true,
-				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
+				MarkdownDescription: "Agent whose runs are scored. Changing this forces a new configuration.",
+				Required:            true,
+				PlanModifiers:       []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"grader_agent_id": schema.StringAttribute{
-				Required: true,
+				MarkdownDescription: "Agent that performs the scoring.",
+				Required:            true,
 			},
 			"guidelines": schema.StringAttribute{
-				Optional: true,
+				MarkdownDescription: "Free-form scoring guidelines handed to the grader agent.",
+				Optional:            true,
 			},
 			"sample_rate": schema.Int64Attribute{
-				Optional:      true,
-				Computed:      true,
-				PlanModifiers: []planmodifier.Int64{int64planmodifier.UseStateForUnknown()},
+				MarkdownDescription: "Percentage of the target agent's runs to score.",
+				Optional:            true,
+				Computed:            true,
+				PlanModifiers:       []planmodifier.Int64{int64planmodifier.UseStateForUnknown()},
 			},
 			"runs_seen": schema.Int64Attribute{
-				Computed: true,
+				MarkdownDescription: "Number of runs considered for sampling so far.",
+				Computed:            true,
 			},
 			"created_at": schema.StringAttribute{
-				Computed:      true,
-				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+				MarkdownDescription: "Creation timestamp.",
+				Computed:            true,
+				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"updated_at": schema.StringAttribute{
-				Computed: true,
+				MarkdownDescription: "Last-update timestamp.",
+				Computed:            true,
 			},
 		},
 	}

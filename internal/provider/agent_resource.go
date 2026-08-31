@@ -183,24 +183,26 @@ func (r *agentResource) Create(ctx context.Context, req resource.CreateRequest, 
 	plan.InstallValues = types.StringValue(created.Values)
 	plan.InstallCommand = types.StringValue(created.Command)
 	plan.WorkerTokenHint = types.StringValue(created.WorkerTokenHint)
+	// The agent is registered from here on. Every remaining computed attribute has
+	// to be known before state can be written on an error path below.
+	agentResolveComputed(&plan, nil)
 
 	if !plan.McpGroupID.IsNull() && !plan.McpGroupID.IsUnknown() {
 		mcpResp, err := r.client.Gen.AgentsSetMcpGroupWithResponse(ctx, plan.AgentID.ValueString(),
 			gen.SetMcpGroupRequest{McpGroupId: stringToPtr(plan.McpGroupID)})
 		if err != nil {
 			resp.Diagnostics.AddError("Error binding MCP group to agent", err.Error())
+			resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 			return
 		}
 		if err := client.Check(mcpResp.HTTPResponse, mcpResp.Body); err != nil {
 			resp.Diagnostics.AddError("Error binding MCP group to agent", err.Error())
+			resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 			return
 		}
 	}
 
 	r.refreshFromGetAPI(ctx, &plan, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -265,10 +267,8 @@ func (r *agentResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		}
 	}
 
+	agentResolveComputed(&plan, &state)
 	r.refreshFromGetAPI(ctx, &plan, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -323,6 +323,30 @@ func archiveAndDeleteAgent(ctx context.Context, cl *client.Client, agentID strin
 
 func (r *agentResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("agent_id"), req, resp)
+}
+
+// agentResolveComputed makes every attribute the post-mutation read would fill
+// known before it runs — from prior state on update, null on create. The read is
+// deliberately soft, and an unknown left in state is rejected as an inconsistent
+// apply result, which would turn a transient 502 into a failed apply.
+func agentResolveComputed(m *agentResourceModel, prior *agentResourceModel) {
+	priorStatus, priorName, priorCreatedAt := types.StringNull(), types.StringNull(), types.StringNull()
+	priorArchived := types.BoolNull()
+	if prior != nil {
+		priorStatus, priorName, priorCreatedAt, priorArchived = prior.Status, prior.Name, prior.CreatedAt, prior.IsArchived
+	}
+	if m.Status.IsUnknown() {
+		m.Status = priorStatus
+	}
+	if m.Name.IsUnknown() {
+		m.Name = priorName
+	}
+	if m.CreatedAt.IsUnknown() {
+		m.CreatedAt = priorCreatedAt
+	}
+	if m.IsArchived.IsUnknown() {
+		m.IsArchived = priorArchived
+	}
 }
 
 func (r *agentResource) refreshFromGetAPI(ctx context.Context, m *agentResourceModel, diags *diag.Diagnostics) {
