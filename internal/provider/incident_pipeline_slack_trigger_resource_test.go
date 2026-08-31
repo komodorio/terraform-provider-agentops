@@ -4,6 +4,7 @@
 package provider
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"testing"
@@ -38,7 +39,7 @@ func TestAccIncidentPipelineSlackTriggerResource(t *testing.T) {
 					resource.TestCheckNoResourceAttr(slackTriggerRes, "match"),
 					captureSlackTriggerPipelineID(&pipelineID),
 					checkSlackTriggerCount(mock, &pipelineID, 1),
-					checkSlackTriggerOnControlPlane(mock, "C0123ABCDEF", "mention"),
+					checkSlackTriggerOnControlPlane(mock, "C0123ABCDEF", "mention", ""),
 				),
 			},
 			{
@@ -57,13 +58,15 @@ func TestAccIncidentPipelineSlackTriggerResource(t *testing.T) {
 	})
 }
 
-// TestAccIncidentPipelineSlackTriggerResource_replaceOnRuleChange is the
-// update path: the API has no update for a Slack trigger, so a changed argument
-// has to tear the route down and create a new one. Asserting the count is what
-// catches a replace that leaves the old route behind on the control plane.
-func TestAccIncidentPipelineSlackTriggerResource_replaceOnRuleChange(t *testing.T) {
+// TestAccIncidentPipelineSlackTriggerResource_replaceOnArgChange is the update
+// path: the API has no update for a Slack trigger, so a changed argument has to
+// tear the route down and create a new one. Each step changes exactly one
+// argument, so a RequiresReplace missing from one of them cannot hide behind
+// another. Asserting the count is what catches a replace that leaves the old
+// route behind on the control plane.
+func TestAccIncidentPipelineSlackTriggerResource_replaceOnArgChange(t *testing.T) {
 	mock := newMockServer(t)
-	var first, pipelineID string
+	var pipelineID, afterRule, afterMatch, afterKeyword string
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
@@ -73,29 +76,54 @@ func TestAccIncidentPipelineSlackTriggerResource_replaceOnRuleChange(t *testing.
 				Config: testAccSlackTriggerConfig(mock.URL,
 					"  channel_id = \"C0123ABCDEF\"\n  rule_type  = \"mention\"\n"),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					captureSlackTriggerID(&first),
 					captureSlackTriggerPipelineID(&pipelineID),
+					captureSlackTriggerID(&afterRule),
 					checkSlackTriggerCount(mock, &pipelineID, 1),
+					checkSlackTriggerOnControlPlane(mock, "C0123ABCDEF", "mention", ""),
 				),
 			},
 			{
+				// rule_type alone.
+				Config: testAccSlackTriggerConfig(mock.URL,
+					"  channel_id = \"C0123ABCDEF\"\n  rule_type  = \"channel\"\n"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(slackTriggerRes, "rule_type", "channel"),
+					checkSlackTriggerReplaced(&afterRule),
+					checkSlackTriggerCount(mock, &pipelineID, 1),
+					checkSlackTriggerOnControlPlane(mock, "C0123ABCDEF", "channel", ""),
+					captureSlackTriggerID(&afterMatch),
+				),
+			},
+			{
+				// match alone, on a rule that reads it.
 				Config: testAccSlackTriggerConfig(mock.URL,
 					"  channel_id = \"C0123ABCDEF\"\n  rule_type  = \"keyword\"\n  match      = jsonencode({ keyword = \"oom\" })\n"),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr(slackTriggerRes, "rule_type", "keyword"),
-					resource.TestCheckResourceAttr(slackTriggerRes, "match", "{\"keyword\":\"oom\"}"),
-					checkSlackTriggerReplaced(&first),
+					resource.TestCheckResourceAttr(slackTriggerRes, "match", `{"keyword":"oom"}`),
+					checkSlackTriggerReplaced(&afterMatch),
 					checkSlackTriggerCount(mock, &pipelineID, 1),
-					checkSlackTriggerOnControlPlane(mock, "C0123ABCDEF", "keyword"),
+					checkSlackTriggerOnControlPlane(mock, "C0123ABCDEF", "keyword", `{"keyword":"oom"}`),
+					captureSlackTriggerID(&afterKeyword),
 				),
 			},
 			{
+				// A different keyword under the same rule_type.
 				Config: testAccSlackTriggerConfig(mock.URL,
-					"  channel_id = \"C9999ZZZZZZ\"\n  rule_type  = \"keyword\"\n  match      = jsonencode({ keyword = \"oom\" })\n"),
+					"  channel_id = \"C0123ABCDEF\"\n  rule_type  = \"keyword\"\n  match      = jsonencode({ keyword = \"crashloop\" })\n"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					checkSlackTriggerReplaced(&afterKeyword),
+					checkSlackTriggerCount(mock, &pipelineID, 1),
+					checkSlackTriggerOnControlPlane(mock, "C0123ABCDEF", "keyword", `{"keyword":"crashloop"}`),
+				),
+			},
+			{
+				// channel_id alone.
+				Config: testAccSlackTriggerConfig(mock.URL,
+					"  channel_id = \"C9999ZZZZZZ\"\n  rule_type  = \"keyword\"\n  match      = jsonencode({ keyword = \"crashloop\" })\n"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(slackTriggerRes, "channel_id", "C9999ZZZZZZ"),
 					checkSlackTriggerCount(mock, &pipelineID, 1),
-					checkSlackTriggerOnControlPlane(mock, "C9999ZZZZZZ", "keyword"),
+					checkSlackTriggerOnControlPlane(mock, "C9999ZZZZZZ", "keyword", `{"keyword":"crashloop"}`),
 				),
 			},
 		},
@@ -219,8 +247,9 @@ func checkSlackTriggerCount(mock *mockServer, pipelineID *string, want int) reso
 }
 
 // checkSlackTriggerOnControlPlane asserts the route Terraform recorded is the one
-// the control plane actually stored, field for field.
-func checkSlackTriggerOnControlPlane(mock *mockServer, wantChannel, wantRule string) resource.TestCheckFunc {
+// the control plane actually stored, field for field. wantMatch is the match_json
+// as compact JSON, or "" for a route that carries none.
+func checkSlackTriggerOnControlPlane(mock *mockServer, wantChannel, wantRule, wantMatch string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		trigger, err := slackTriggerState(s)
 		if err != nil {
@@ -236,6 +265,17 @@ func checkSlackTriggerOnControlPlane(mock *mockServer, wantChannel, wantRule str
 		}
 		if got := toString(route["rule_type"]); got != wantRule {
 			return fmt.Errorf("route %s has rule_type %q, want %q", trigger.Primary.ID, got, wantRule)
+		}
+		match, err := json.Marshal(route["match_json"])
+		if err != nil {
+			return err
+		}
+		got := string(match)
+		if got == "{}" || got == "null" {
+			got = ""
+		}
+		if got != wantMatch {
+			return fmt.Errorf("route %s has match_json %s, want %q", trigger.Primary.ID, match, wantMatch)
 		}
 		return nil
 	}
