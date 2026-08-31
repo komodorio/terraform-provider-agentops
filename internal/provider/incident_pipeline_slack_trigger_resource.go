@@ -29,12 +29,12 @@ var (
 	_ resource.ResourceWithImportState = &incidentPipelineSlackTriggerResource{}
 )
 
-// slackConnectorPrerequisite is the hint appended to a refused create. The
-// control plane's own message for the missing connector is a garbled serializer
+// slackConnectorPrerequisite is the hint appended to a refused create. A control
+// plane predating the 409 answers the missing connector with a garbled serializer
 // error, so without this the operator has nothing actionable to go on.
 const slackConnectorPrerequisite = "An incident pipeline can only be triggered from Slack on an account with an active Slack connector. " +
-	"Connect Slack (Settings -> Integrations) before declaring this resource; a control plane without one refuses the create, " +
-	"in some versions with an unhelpful serializer message rather than a description of the precondition."
+	"Connect Slack (Settings -> Integrations) before declaring this resource; a control plane without one refuses the create — " +
+	"as a 409 naming the precondition, or, on a version predating that fix, as a 422 whose body is a serializer error instead."
 
 // NewIncidentPipelineSlackTriggerResource is the constructor registered with the provider.
 func NewIncidentPipelineSlackTriggerResource() resource.Resource {
@@ -66,8 +66,8 @@ func (r *incidentPipelineSlackTriggerResource) Schema(ctx context.Context, req r
 			"matching `rule_type` opens an incident on the pipeline instead of waiting for an alert from its webhook.\n\n" +
 			"~> **An active Slack connector is a prerequisite.** The route is created against the account's Slack " +
 			"connector, so connect Slack before declaring this resource. On an account without one the create is " +
-			"refused, in some control-plane versions with an unhelpful serializer message rather than a description " +
-			"of the precondition.\n\n" +
+			"refused with a `409`; a control plane predating that status answers a `422` whose body is a serializer " +
+			"error rather than the precondition, so the diagnostic carries the prerequisite itself either way.\n\n" +
 			"The API has no update for a Slack trigger, so changing any argument replaces the route.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -163,7 +163,9 @@ func (r *incidentPipelineSlackTriggerResource) Read(ctx context.Context, req res
 	}
 
 	// Slack triggers have no get-by-id endpoint; list the pipeline's and match id.
-	// A deleted pipeline 404s the listing, which is this route gone too.
+	// The listing answers 200 with an empty array for a pipeline that does not exist,
+	// so a route gone with its pipeline arrives as an absence below rather than as a
+	// 404; the 404 is a control plane not serving this endpoint at all.
 	raw, err := client.Do(r.client.Gen.IncidentPipelinesListSlackTriggersEndpoint(ctx, state.PipelineID.ValueString()))
 	if err != nil {
 		if client.IsNotFound(err) {
@@ -232,9 +234,9 @@ func (r *incidentPipelineSlackTriggerResource) ImportState(ctx context.Context, 
 }
 
 // slackTriggerCreateDetail annotates a refused create with the connector
-// prerequisite. 409 is the precondition's own status; a 422 is either the same
-// precondition on a control plane that predates that fix, or a body the endpoint
-// rejected — the hint is worded so it is safe to show for both.
+// prerequisite. 409 is the precondition's own status, what a current control plane
+// answers; a 422 is either the same precondition on a control plane that predates
+// it, or a body the endpoint rejected — the hint is worded to be safe for both.
 func slackTriggerCreateDetail(err error) string {
 	if client.IsConflict(err) || client.IsUnprocessable(err) {
 		return err.Error() + "\n\n" + slackConnectorPrerequisite
@@ -242,11 +244,54 @@ func slackTriggerCreateDetail(err error) string {
 	return err.Error()
 }
 
-// slackTriggerApply writes a SlackTriggerInfo into the model.
+// slackTriggerApply writes a SlackTriggerInfo into the model. m.Match is read
+// before it is overwritten, so pass the plan on create and the prior state on
+// refresh — slackTriggerMatch needs to know whether the configuration named
+// `channels` itself.
 func slackTriggerApply(m *incidentPipelineSlackTriggerResourceModel, route *gen.SlackTriggerInfo) {
 	m.ID = types.StringValue(route.RouteId)
 	m.ChannelID = types.StringValue(route.ChannelId)
 	m.RuleType = types.StringValue(route.RuleType)
-	m.Match = mapPtrToJSON(route.MatchJson)
+	m.Match = slackTriggerMatch(m.Match, route)
 	m.IsEnabled = types.BoolValue(route.IsEnabled)
+}
+
+// slackTriggerMatch renders a route's match_json into the attribute, dropping the
+// `channels` the control plane injects: it stores match_json as the request's
+// object plus `{"channels": [channel_id]}`, so every response is a superset of the
+// configured match. `match` is Optional, so state carrying a key the
+// configuration never wrote fails the apply as an inconsistent result — the
+// documented `keyword` case. The key is redundant with channel_id, which is
+// Required, so dropping it loses nothing. It is dropped only when it is exactly
+// that injection and the configuration did not name `channels` itself, so
+// anything else the API answers is reported rather than hidden.
+func slackTriggerMatch(configured jsontypes.Normalized, route *gen.SlackTriggerInfo) jsontypes.Normalized {
+	match := route.MatchJson
+	if match != nil && slackTriggerDerivedChannels((*match)["channels"], route.ChannelId) && !jsonObjectHas(configured, "channels") {
+		trimmed := make(map[string]interface{}, len(*match))
+		for k, v := range *match {
+			if k != "channels" {
+				trimmed[k] = v
+			}
+		}
+		match = &trimmed
+	}
+	// mapPtrToJSON renders an empty object as null, which is right for a match the
+	// configuration never set — but a configuration that set an explicitly empty
+	// one planned that object, and null is not it.
+	if (match == nil || len(*match) == 0) && jsonObjectEmpty(configured) {
+		return configured
+	}
+	return mapPtrToJSON(match)
+}
+
+// slackTriggerDerivedChannels reports whether a match_json `channels` value is
+// exactly the one-element list the control plane derives from channel_id.
+func slackTriggerDerivedChannels(value interface{}, channelID string) bool {
+	list, ok := value.([]interface{})
+	if !ok || len(list) != 1 {
+		return false
+	}
+	only, ok := list[0].(string)
+	return ok && only == channelID
 }

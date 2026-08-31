@@ -92,8 +92,14 @@ func (r *mcpGatewayServerResource) Schema(ctx context.Context, req resource.Sche
 				Required:            true,
 			},
 			"url": schema.StringAttribute{
-				MarkdownDescription: "Endpoint URL for the upstream MCP server.",
-				Required:            true,
+				MarkdownDescription: "Endpoint URL for the upstream MCP server. " +
+					"**Binding an `integration` credential can rewrite it once:** when the connection's provider spec " +
+					"carries an MCP URL template — today only `aws` and `datadog` — `PUT .../credential` replaces the " +
+					"server's URL with that provider's regional host. The create response is read before the bind, so " +
+					"state keeps the configured value and the next refresh reports the rewritten one as drift. That " +
+					"diff is one-time rather than perpetual, because applying it sends the configured URL back; declare " +
+					"the regional host here if you want the control plane's value to be the one that stays.",
+				Required: true,
 			},
 			"allow": schema.ListAttribute{
 				MarkdownDescription: "Glob patterns of tool names to expose (empty = all).",
@@ -137,7 +143,14 @@ func (r *mcpGatewayServerResource) Schema(ctx context.Context, req resource.Sche
 					"credential references on a server that has a `credential` binding — set `credential_source_id`. " +
 					"With no binding, nothing resolves the reference and the literal text `${credential:NAME}` is sent " +
 					"upstream as the header value, which the upstream rejects (typically `401`) with no error raised " +
-					"by Terraform or the control plane. `${env:VAR}` and `${file:path}` are unaffected.",
+					"by Terraform or the control plane. `${env:VAR}` and `${file:path}` are unaffected.\n\n" +
+					"~> **The bound credential gates the substitution; it does not select the secret.** A reference is " +
+					"resolved by the **name** it carries, looked up among the account's credentials, and a resolved " +
+					"reference wins over the bound credential's own `Authorization: Bearer` header. So any valid " +
+					"`credential_source_id` of source `credential` — not necessarily the credential the reference " +
+					"names — is enough to make every reference on the server resolve. Bind the credential the header " +
+					"actually names anyway: it is what the dial falls back to when no reference resolves, and it is " +
+					"what an audit of the binding will show as the secret this upstream is reached with.",
 				ElementType:   types.StringType,
 				Optional:      true,
 				Computed:      true,
@@ -188,9 +201,11 @@ func (r *mcpGatewayServerResource) Schema(ctx context.Context, req resource.Sche
 			},
 			"credential_source_id": schema.StringAttribute{
 				MarkdownDescription: "Credential bound to this server: the id of an `agentops_credential` (the default) or, with " +
-					"`credential_source = \"integration\"`, of an `agentops_integration_connection`. The binding both " +
-					"authenticates the upstream dial and is what makes a `${credential:NAME}` reference in " +
-					"`static_headers` resolve — see the note there. " + credentialBindingNote,
+					"`credential_source = \"integration\"`, of an `agentops_integration_connection`. The binding " +
+					"authenticates the upstream dial, and is also what makes a `${credential:NAME}` reference in " +
+					"`static_headers` resolve — for a server whose headers carry such a reference it is only that " +
+					"gate, because the reference is resolved by name and wins over this credential's bearer header. " +
+					"See the note on `static_headers`. " + credentialBindingNote,
 				Optional: true,
 			},
 			"credential_source": schema.StringAttribute{
@@ -545,8 +560,11 @@ func (r *mcpGatewayServerResource) bindCredential(ctx context.Context, serverID,
 	return true
 }
 
-// unbindCredential detaches this server's credential, treating an already-absent
-// binding as success. Reports whether the binding is gone.
+// unbindCredential detaches this server's credential. Reports whether the binding
+// is gone. The 404 tolerance is load-bearing, not belt-and-braces: DELETE
+// .../credential answers 404 "server credential not found" for a server with no
+// binding, so an unbind that lands after the binding is already gone — removed in
+// the UI between this plan's refresh and its apply — has to read as success.
 func (r *mcpGatewayServerResource) unbindCredential(ctx context.Context, serverID string, diags *diag.Diagnostics) bool {
 	if _, err := client.Do(r.client.Gen.GatewayAdminDeleteServerCredential(ctx, serverID)); err != nil && !client.IsNotFound(err) {
 		diags.AddError("Error unbinding credential from MCP gateway server", err.Error())

@@ -135,6 +135,31 @@ func mapPtrToJSON(m *map[string]interface{}) jsontypes.Normalized {
 	return jsontypes.NewNormalizedValue(string(b))
 }
 
+// jsonObjectHas reports whether a normalized JSON-string attribute is an object
+// carrying key. A null, unknown or unparseable value carries nothing.
+func jsonObjectHas(v jsontypes.Normalized, key string) bool {
+	_, ok := jsonObject(v)[key]
+	return ok
+}
+
+// jsonObjectEmpty reports whether a normalized JSON-string attribute is an object
+// with no keys, which is a value a configuration can set and null is not.
+func jsonObjectEmpty(v jsontypes.Normalized) bool {
+	m := jsonObject(v)
+	return m != nil && len(m) == 0
+}
+
+func jsonObject(v jsontypes.Normalized) map[string]interface{} {
+	if v.IsNull() || v.IsUnknown() {
+		return nil
+	}
+	var m map[string]interface{}
+	if err := json.Unmarshal([]byte(v.ValueString()), &m); err != nil {
+		return nil
+	}
+	return m
+}
+
 // listToStringSlice converts an optional Terraform list into a *[]string request
 // field, leaving it nil (omitted) when the list is null or unknown.
 func listToStringSlice(ctx context.Context, list types.List, target **[]string) diag.Diagnostics {

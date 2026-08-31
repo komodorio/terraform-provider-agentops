@@ -74,9 +74,18 @@ type mockServer struct {
 	// refuses a connection whose OAuth has lapsed.
 	integrationInactive bool
 	// noSlackConnector mirrors an account with no active Slack connector, the
-	// prerequisite for a Slack trigger. 422 with the control plane's own garbled
-	// serializer message, which is what a deployed instance actually answers.
+	// prerequisite for a Slack trigger: 409 naming the precondition, which is what a
+	// current control plane answers.
 	noSlackConnector bool
+	// legacySlackRefusal makes that refusal the 422 a control plane predating the
+	// 409 answers, whose body is a garbled serializer message rather than the
+	// precondition. Both statuses have to carry the prerequisite into the diagnostic.
+	legacySlackRefusal bool
+	// credentialUnbindRace makes DELETE /servers/{id}/credential answer 404 with the
+	// binding dropped, standing in for one removed between the plan's refresh and
+	// the apply's call. The route's own 404 for an absent binding is what the
+	// resource's tolerance is measured against.
+	credentialUnbindRace bool
 	// selfHostedAgs are the agents a self-hosted catalog deploy registers, keyed by
 	// agent id. They live under /api/v1/agents, not /api/v1/hosted-agents.
 	selfHostedAgs map[string]map[string]any
@@ -854,14 +863,11 @@ func (m *mockServer) incidentPipelineByID(w http.ResponseWriter, r *http.Request
 	}
 }
 
-// slackTriggers lists or creates a pipeline's Slack trigger routes. A pipeline
-// that does not exist 404s, and a listing with no routes is an empty array, not a
-// 404 — both the way the real routes answer.
+// slackTriggers lists or creates a pipeline's Slack trigger routes. The listing
+// answers 200 with an empty array for a pipeline that has no routes and for one
+// that does not exist at all; only the create 404s an unknown pipeline. Both the
+// way the real routes answer.
 func (m *mockServer) slackTriggers(w http.ResponseWriter, r *http.Request, pipelineID string) {
-	if _, ok := m.incidentPls[pipelineID]; !ok {
-		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "incident pipeline not found"})
-		return
-	}
 	switch r.Method {
 	case http.MethodGet:
 		out := []map[string]any{}
@@ -870,11 +876,21 @@ func (m *mockServer) slackTriggers(w http.ResponseWriter, r *http.Request, pipel
 		}
 		writeJSON(w, http.StatusOK, out)
 	case http.MethodPost:
+		if _, ok := m.incidentPls[pipelineID]; !ok {
+			writeJSON(w, http.StatusNotFound, map[string]any{"detail": "incident pipeline not found"})
+			return
+		}
 		if m.noSlackConnector {
-			// Verbatim what a control plane without the 409 fix answers: the
-			// precondition's message never survives serialization.
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
-				"detail": "dictionary update sequence element #0 has length 1; 2 is required",
+			if m.legacySlackRefusal {
+				// Verbatim what a control plane predating the 409 answers: the
+				// precondition's message never survives serialization.
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
+					"detail": "dictionary update sequence element #0 has length 1; 2 is required",
+				})
+				return
+			}
+			writeJSON(w, http.StatusConflict, map[string]any{
+				"detail": "No active Slack connector registered for this account",
 			})
 			return
 		}
@@ -884,7 +900,7 @@ func (m *mockServer) slackTriggers(w http.ResponseWriter, r *http.Request, pipel
 			"route_id":   routeID,
 			"channel_id": toString(body["channel_id"]),
 			"rule_type":  toString(valueOr(body["rule_type"], "mention")),
-			"match_json": valueOr(body["match_json"], map[string]any{}),
+			"match_json": slackTriggerStoredMatch(body["match_json"], toString(body["channel_id"])),
 			"is_enabled": true,
 		}
 		if m.slackRoutes[pipelineID] == nil {
@@ -895,6 +911,21 @@ func (m *mockServer) slackTriggers(w http.ResponseWriter, r *http.Request, pipel
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{})
 	}
+}
+
+// slackTriggerStoredMatch renders match_json the way the control plane stores it:
+// the request's object plus a channels key holding the channel_id argument,
+// written unconditionally, so every response is a superset of what was sent — and
+// overwrites a channels the request supplied itself.
+func slackTriggerStoredMatch(sent any, channelID string) map[string]any {
+	stored := map[string]any{}
+	if m, ok := sent.(map[string]any); ok {
+		for k, v := range m {
+			stored[k] = v
+		}
+	}
+	stored["channels"] = []any{channelID}
+	return stored
 }
 
 func (m *mockServer) slackTriggerDelete(w http.ResponseWriter, pipelineID, routeID string) {
@@ -1327,6 +1358,9 @@ func (m *mockServer) serverCredential(w http.ResponseWriter, r *http.Request, se
 			"credential_source_id": sourceID,
 		})
 	case http.MethodDelete:
+		if m.credentialUnbindRace {
+			delete(m.serverCreds, serverID)
+		}
 		if _, bound := m.serverCreds[serverID]; !bound {
 			writeJSON(w, http.StatusNotFound, map[string]any{"detail": "server credential not found"})
 			return

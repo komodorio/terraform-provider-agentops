@@ -51,14 +51,14 @@ resource "agentops_mcp_gateway_server" "grafana" {
 ### Required
 
 - `name` (String) Unique name; also used as the mount namespace/prefix. Letters, digits and hyphens only.
-- `url` (String) Endpoint URL for the upstream MCP server.
+- `url` (String) Endpoint URL for the upstream MCP server. **Binding an `integration` credential can rewrite it once:** when the connection's provider spec carries an MCP URL template — today only `aws` and `datadog` — `PUT .../credential` replaces the server's URL with that provider's regional host. The create response is read before the bind, so state keeps the configured value and the next refresh reports the rewritten one as drift. That diff is one-time rather than perpetual, because applying it sends the configured URL back; declare the regional host here if you want the control plane's value to be the one that stays.
 
 ### Optional
 
 - `allow` (List of String) Glob patterns of tool names to expose (empty = all).
 - `auth` (String) Upstream authentication scheme (`none`, `oauth`, `oauth_client_credentials`).
 - `credential_source` (String) What kind of source `credential_source_id` names: `credential` for an AgentOps credential, `integration` for an integration connection. Defaults to `credential`, and is only meaningful alongside `credential_source_id`.
-- `credential_source_id` (String) Credential bound to this server: the id of an `agentops_credential` (the default) or, with `credential_source = "integration"`, of an `agentops_integration_connection`. The binding both authenticates the upstream dial and is what makes a `${credential:NAME}` reference in `static_headers` resolve — see the note there. Left unmanaged while unset: a credential bound outside Terraform is not adopted into state. Once set, the binding is reconciled on every plan, so unbinding it out of band plans a re-bind.
+- `credential_source_id` (String) Credential bound to this server: the id of an `agentops_credential` (the default) or, with `credential_source = "integration"`, of an `agentops_integration_connection`. The binding authenticates the upstream dial, and is also what makes a `${credential:NAME}` reference in `static_headers` resolve — for a server whose headers carry such a reference it is only that gate, because the reference is resolved by name and wins over this credential's bearer header. See the note on `static_headers`. Left unmanaged while unset: a credential bound outside Terraform is not adopted into state. Once set, the binding is reconciled on every plan, so unbinding it out of band plans a re-bind.
 - `deny` (List of String) Glob patterns of tool names to hide (wins over allow).
 - `enabled` (Boolean) Whether the server is enabled.
 - `labels` (Map of String) Arbitrary key/value labels applied to the server.
@@ -70,6 +70,8 @@ resource "agentops_mcp_gateway_server" "grafana" {
 - `static_headers` (Map of String) Headers always sent upstream. Values may embed `${env:VAR}`, `${file:path}` or `${credential:NAME}` secret references, resolved at connect time; only the reference is stored.
 
 ~> **`${credential:NAME}` needs a credential bound to this server.** The gateway only substitutes credential references on a server that has a `credential` binding — set `credential_source_id`. With no binding, nothing resolves the reference and the literal text `${credential:NAME}` is sent upstream as the header value, which the upstream rejects (typically `401`) with no error raised by Terraform or the control plane. `${env:VAR}` and `${file:path}` are unaffected.
+
+~> **The bound credential gates the substitution; it does not select the secret.** A reference is resolved by the **name** it carries, looked up among the account's credentials, and a resolved reference wins over the bound credential's own `Authorization: Bearer` header. So any valid `credential_source_id` of source `credential` — not necessarily the credential the reference names — is enough to make every reference on the server resolve. Bind the credential the header actually names anyway: it is what the dial falls back to when no reference resolves, and it is what an audit of the binding will show as the secret this upstream is reached with.
 - `tags` (List of String) Free-form tags applied to the server.
 - `timeout_seconds` (Number) Upstream connection timeout in seconds.
 - `transport` (String) Transport used to reach the upstream MCP server (`http`, `sse`).
@@ -87,4 +89,11 @@ The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/c
 ```shell
 # MCP gateway servers are imported by their id.
 terraform import agentops_mcp_gateway_server.docs srv_01hxyz
+
+# An imported server carries no credential binding: the server record does not echo
+# one, and a credential attribute the configuration has not set is deliberately left
+# unmanaged rather than adopted. So a server that already has a binding imports with
+# both attributes null, and the first plan after the import shows a re-bind of the
+# credential the configuration names — an idempotent upsert of the binding that is
+# already there, not a change to the upstream.
 ```

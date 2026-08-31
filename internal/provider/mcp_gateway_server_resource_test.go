@@ -348,6 +348,37 @@ func TestAccMCPGatewayServerResource_credentialDriftPlansRebind(t *testing.T) {
 	})
 }
 
+// TestAccMCPGatewayServerResource_credentialUnbindToleratesAbsentBinding covers
+// the unbind whose binding is already gone. DELETE .../credential answers 404 for
+// a server with no binding — the route raises on an UPDATE that matches no
+// unbound-to-bound row — so an attribute removed from the configuration after
+// someone detached the binding in the UI fails the apply unless that 404 reads as
+// success. The tolerance is the whole test: nothing else exercises it.
+func TestAccMCPGatewayServerResource_credentialUnbindToleratesAbsentBinding(t *testing.T) {
+	mock := newMockServer(t)
+	// Set up front rather than in a PreConfig: the mock reads it from the request
+	// goroutine, and step 1 issues no DELETE for it to change the answer to.
+	mock.credentialUnbindRace = true
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccServerCredentialConfig(mock.URL, "  credential_source_id = agentops_credential.a.id\n"),
+				Check:  checkServerCredential(mock, "credential", "agentops_credential.a"),
+			},
+			{
+				Config: testAccServerCredentialConfig(mock.URL, ""),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckNoResourceAttr("agentops_mcp_gateway_server.test", "credential_source_id"),
+					checkServerCredential(mock, "", ""),
+				),
+			},
+		},
+	})
+}
+
 // captureServerID records the server's id for a later step's PreConfig, which runs
 // with no access to state.
 func captureServerID(out *string) resource.TestCheckFunc {

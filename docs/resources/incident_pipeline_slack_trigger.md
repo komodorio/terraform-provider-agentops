@@ -4,7 +4,7 @@ page_title: "agentops_incident_pipeline_slack_trigger Resource - agentops"
 subcategory: ""
 description: |-
   A Slack channel that starts an agentops_incident_pipeline. Slack activity in the channel matching rule_type opens an incident on the pipeline instead of waiting for an alert from its webhook.
-  ~> An active Slack connector is a prerequisite. The route is created against the account's Slack connector, so connect Slack before declaring this resource. On an account without one the create is refused, in some control-plane versions with an unhelpful serializer message rather than a description of the precondition.
+  ~> An active Slack connector is a prerequisite. The route is created against the account's Slack connector, so connect Slack before declaring this resource. On an account without one the create is refused with a 409; a control plane predating that status answers a 422 whose body is a serializer error rather than the precondition, so the diagnostic carries the prerequisite itself either way.
   The API has no update for a Slack trigger, so changing any argument replaces the route.
 ---
 
@@ -12,7 +12,7 @@ description: |-
 
 A Slack channel that starts an `agentops_incident_pipeline`. Slack activity in the channel matching `rule_type` opens an incident on the pipeline instead of waiting for an alert from its webhook.
 
-~> **An active Slack connector is a prerequisite.** The route is created against the account's Slack connector, so connect Slack before declaring this resource. On an account without one the create is refused, in some control-plane versions with an unhelpful serializer message rather than a description of the precondition.
+~> **An active Slack connector is a prerequisite.** The route is created against the account's Slack connector, so connect Slack before declaring this resource. On an account without one the create is refused with a `409`; a control plane predating that status answers a `422` whose body is a serializer error rather than the precondition, so the diagnostic carries the prerequisite itself either way.
 
 The API has no update for a Slack trigger, so changing any argument replaces the route.
 
