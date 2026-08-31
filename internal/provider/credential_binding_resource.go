@@ -156,7 +156,7 @@ func (r *credentialBindingResource) Read(ctx context.Context, req resource.ReadR
 		return
 	}
 
-	var found *gen.CredentialBinding
+	var found *gen.CredentialBindingView
 	for i := range *apiResp.JSON200 {
 		if (*apiResp.JSON200)[i].AgentId == state.AgentID.ValueString() {
 			found = &(*apiResp.JSON200)[i]

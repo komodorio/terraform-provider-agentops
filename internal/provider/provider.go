@@ -106,6 +106,7 @@ func (p *KomodorAgentOpsProvider) Configure(ctx context.Context, req provider.Co
 
 func (p *KomodorAgentOpsProvider) Resources(ctx context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
+		NewAgentResource,
 		NewTriggerResource,
 		NewAPIKeyResource,
 		NewRoleResource,
@@ -130,6 +131,8 @@ func (p *KomodorAgentOpsProvider) Resources(ctx context.Context) []func() resour
 		NewChannelRouteResource,
 		NewHostedAgentResource,
 		NewWorkerCatalogDeploymentResource,
+		NewSelfHostedCatalogDeploymentResource,
+		NewOutpostResource,
 	}
 }
 
@@ -141,6 +144,7 @@ func (p *KomodorAgentOpsProvider) DataSources(ctx context.Context) []func() data
 		NewWorkerCatalogDataSource,
 		NewSkillsDataSource,
 		NewReviewersDataSource,
+		NewOutpostInstallDataSource,
 	}
 }
 

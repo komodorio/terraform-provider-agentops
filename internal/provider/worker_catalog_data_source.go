@@ -39,7 +39,6 @@ type workerCatalogEntryModel struct {
 	Status             types.String `tfsdk:"status"`
 	DocsURL            types.String `tfsdk:"docs_url"`
 	Ready              types.Bool   `tfsdk:"ready"`
-	ConfigurableModel  types.Bool   `tfsdk:"configurable_model"`
 	SupportsChat       types.Bool   `tfsdk:"supports_chat"`
 	SupportsMCP        types.Bool   `tfsdk:"supports_mcp"`
 	SupportsTriggers   types.Bool   `tfsdk:"supports_triggers"`
@@ -59,17 +58,16 @@ func (d *workerCatalogDataSource) Schema(ctx context.Context, req datasource.Sch
 				Computed:            true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
-						"id":                 schema.StringAttribute{Computed: true, MarkdownDescription: "Catalog entry identifier."},
-						"name":               schema.StringAttribute{Computed: true, MarkdownDescription: "Display name."},
-						"description":        schema.StringAttribute{Computed: true, MarkdownDescription: "Description."},
-						"category":           schema.StringAttribute{Computed: true, MarkdownDescription: "Category."},
-						"status":             schema.StringAttribute{Computed: true, MarkdownDescription: "Status."},
-						"docs_url":           schema.StringAttribute{Computed: true, MarkdownDescription: "Documentation URL."},
-						"ready":              schema.BoolAttribute{Computed: true, MarkdownDescription: "Whether the catalog worker is ready to deploy."},
-						"configurable_model": schema.BoolAttribute{Computed: true, MarkdownDescription: "Whether the worker's model is configurable."},
-						"supports_chat":      schema.BoolAttribute{Computed: true, MarkdownDescription: "Whether the worker supports chat."},
-						"supports_mcp":       schema.BoolAttribute{Computed: true, MarkdownDescription: "Whether the worker supports MCP."},
-						"supports_triggers":  schema.BoolAttribute{Computed: true, MarkdownDescription: "Whether the worker supports triggers."},
+						"id":                schema.StringAttribute{Computed: true, MarkdownDescription: "Catalog entry identifier."},
+						"name":              schema.StringAttribute{Computed: true, MarkdownDescription: "Display name."},
+						"description":       schema.StringAttribute{Computed: true, MarkdownDescription: "Description."},
+						"category":          schema.StringAttribute{Computed: true, MarkdownDescription: "Category."},
+						"status":            schema.StringAttribute{Computed: true, MarkdownDescription: "Status."},
+						"docs_url":          schema.StringAttribute{Computed: true, MarkdownDescription: "Documentation URL."},
+						"ready":             schema.BoolAttribute{Computed: true, MarkdownDescription: "Whether the catalog worker is ready to deploy."},
+						"supports_chat":     schema.BoolAttribute{Computed: true, MarkdownDescription: "Whether the worker supports chat."},
+						"supports_mcp":      schema.BoolAttribute{Computed: true, MarkdownDescription: "Whether the worker supports MCP."},
+						"supports_triggers": schema.BoolAttribute{Computed: true, MarkdownDescription: "Whether the worker supports triggers."},
 						"missing_credentials": schema.ListAttribute{
 							Computed:            true,
 							ElementType:         types.StringType,
@@ -116,7 +114,6 @@ func (d *workerCatalogDataSource) Read(ctx context.Context, req datasource.ReadR
 			Status:             types.StringValue(e.Status),
 			DocsURL:            ptrToString(e.DocsUrl),
 			Ready:              boolPtrToBool(e.Ready),
-			ConfigurableModel:  boolPtrToBool(e.ConfigurableModel),
 			SupportsChat:       boolPtrToBool(e.SupportsChat),
 			SupportsMCP:        boolPtrToBool(e.SupportsMcp),
 			SupportsTriggers:   boolPtrToBool(e.SupportsTriggers),

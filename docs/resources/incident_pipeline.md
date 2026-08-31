@@ -132,7 +132,7 @@ resource "agentops_incident_pipeline" "incidents" {
 Required:
 
 - `monitor_mode` (String) How the pipeline binds to the provider's monitor. One of `create_catchall`, `link_existing`.
-- `provider` (String) Alert provider. One of `datadog`, `generic`.
+- `provider` (String) Alert provider. One of `datadog`, `grafana`, `alertmanager`, `pagerduty`, `opsgenie`, `generic`.
 
 Optional:
 

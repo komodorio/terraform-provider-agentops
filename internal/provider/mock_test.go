@@ -57,10 +57,36 @@ type mockServer struct {
 	stores      map[string]map[string]map[string]any // generic CRUD: collection -> id -> record
 	incidentPls map[string]map[string]any            // incident pipelines
 	reviewWfs   map[string]map[string]any            // review workflows
-	graderCfgs  map[string]map[string]any            // grader configs
 	channels    map[string]map[string]any            // channels
 	chanRoutes  map[string]map[string]map[string]any // channel_id -> route_id -> route
 	hostedAgs   map[string]map[string]any            // "customer/agent_id" -> hosted agent
+	outposts    map[string]map[string]any            // outposts
+	// selfHostedAgs are the agents a self-hosted catalog deploy registers, keyed by
+	// agent id. They live under /api/v1/agents, not /api/v1/hosted-agents.
+	selfHostedAgs map[string]map[string]any
+	// selfHostedTriggerFails makes the self-hosted deploy answer 207 with one failed
+	// trigger, the partial success the resource must keep rather than roll back.
+	selfHostedTriggerFails bool
+	// selfHostedMcpGroupFails makes the self-hosted deploy answer 207 with a failed
+	// mcp_group_id settings section and no group bound. The real endpoint applies
+	// settings after the token is minted and reports per-field failure instead of
+	// raising, so the post-deploy read can honestly report no group at all.
+	selfHostedMcpGroupFails bool
+	// agentReadFails is how many GET /agents/{id} reads are refused before the
+	// record is served again, standing in for a read that fails right after a
+	// mutation. 403 rather than a 5xx because the client retries 5xx away.
+	agentReadFails int
+	// mcpGroupBindFails refuses PATCH /agents/{id}/mcp-group, the follow-up call a
+	// create makes after the agent is already registered.
+	mcpGroupBindFails bool
+	// mcpGroupBindSilent accepts PATCH /agents/{id}/mcp-group without recording it,
+	// so the agent read that follows does not echo the group back. It stands in for
+	// a bind the control plane took but the read has not caught up with.
+	mcpGroupBindSilent bool
+	// serverUpdateDropsOutpost makes PATCH /gateway/admin/servers/{id} answer without
+	// an outpost_id. The real UpdateServerRequest has no outpost field, so its
+	// response can echo null for a server that is bound.
+	serverUpdateDropsOutpost bool
 	// deployFails makes every hosted agent this server creates behave like a failed
 	// cluster-side provision: the hosted record stays "draft" (that record's status
 	// only ever tracks heartbeats) while the runtime agent record reports the failure.
@@ -77,6 +103,18 @@ type mockServer struct {
 	// archiveSettlesAfter is how many deploy-status reads the archive stays
 	// in_progress for, standing in for the scale-to-zero deploy taking a while.
 	archiveSettlesAfter int
+	// deleteAgentAnswer overrides how DELETE /agents/{id} answers; see the
+	// deleteAgentMode constants. Empty is the normal 204.
+	deleteAgentAnswer deleteAgentMode
+	// heartbeatedAgs are the self-hosted agents whose worker has come online at
+	// least once. The draft delete — the only one not behind the lifecycle feature
+	// — refuses them, so this is what separates an agent Terraform can still tear
+	// down on a gate-off account from one it cannot.
+	heartbeatedAgs map[string]bool
+	// deletedAgs are the self-hosted agents a delete removed. Without it an unknown
+	// id falls through to the synthesized hosted-runtime record below and reads 200
+	// forever, so a deleted agent would still look alive.
+	deletedAgs map[string]bool
 	// revokedTokens records the agents whose worker token the delete revoked. The
 	// real API only revokes on the decommission path, which a delete issued while
 	// the archive deploy is still in flight never reaches.
@@ -107,7 +145,6 @@ var (
 )
 
 var (
-	graderConfigIDRe      = regexp.MustCompile(`^/api/v1/grader-configs/([^/]+)$`)
 	channelIDRe           = regexp.MustCompile(`^/api/v1/channels/([^/]+)$`)
 	channelActionRe       = regexp.MustCompile(`^/api/v1/channels/([^/]+)/(pause|resume)$`)
 	channelRoutesRe       = regexp.MustCompile(`^/api/v1/channels/([^/]+)/routes$`)
@@ -116,6 +153,17 @@ var (
 	runtimeAgentByIDRe    = regexp.MustCompile(`^/api/v1/agents/([^/]+)$`)
 	hostedAgentArchiveRe  = regexp.MustCompile(`^/api/v1/hosted-agents/([^/]+)/([^/]+)/archive$`)
 	workerCatalogDeployRe = regexp.MustCompile(`^/api/v1/worker-catalog/([^/]+)/deploy$`)
+
+	agentMcpGroupRe = regexp.MustCompile(`^/api/v1/agents/([^/]+)/mcp-group$`)
+	agentDraftRe    = regexp.MustCompile(`^/api/v1/agents/([^/]+)/draft$`)
+
+	outpostIDRe      = regexp.MustCompile(`^/api/v1/outposts/([^/]+)$`)
+	outpostInstallRe = regexp.MustCompile(`^/api/v1/outposts/([^/]+)/install$`)
+	serverOutpostRe  = regexp.MustCompile(`^/api/v1/gateway/admin/servers/([^/]+)/outpost$`)
+	serverIDRe       = regexp.MustCompile(`^/api/v1/gateway/admin/servers/([^/]+)$`)
+
+	runtimeAgentArchiveRe         = regexp.MustCompile(`^/api/v1/agents/([^/]+)/archive$`)
+	workerCatalogSelfHostedDeploy = regexp.MustCompile(`^/api/v1/worker-catalog/([^/]+)/self-hosted-deploy$`)
 )
 
 // tune applies mock configuration under the lock every handler reads it with, so a
@@ -129,22 +177,25 @@ func (m *mockServer) tune(fn func(*mockServer)) {
 func newMockServer(t *testing.T) *mockServer {
 	t.Helper()
 	m := &mockServer{
-		triggers:      map[string]map[string]any{},
-		apiKeys:       map[string]map[string]any{},
-		schedules:     map[string]map[string]any{},
-		serviceAccs:   map[string]map[string]any{},
-		policies:      map[string]map[string]any{},
-		conns:         map[string]map[string]any{},
-		bindings:      map[string]map[string]map[string]any{},
-		kbAgents:      map[string]map[string]map[string]any{},
-		stores:        map[string]map[string]map[string]any{},
-		incidentPls:   map[string]map[string]any{},
-		reviewWfs:     map[string]map[string]any{},
-		graderCfgs:    map[string]map[string]any{},
-		channels:      map[string]map[string]any{},
-		chanRoutes:    map[string]map[string]map[string]any{},
-		hostedAgs:     map[string]map[string]any{},
-		revokedTokens: map[string]bool{},
+		triggers:       map[string]map[string]any{},
+		apiKeys:        map[string]map[string]any{},
+		schedules:      map[string]map[string]any{},
+		serviceAccs:    map[string]map[string]any{},
+		policies:       map[string]map[string]any{},
+		conns:          map[string]map[string]any{},
+		bindings:       map[string]map[string]map[string]any{},
+		kbAgents:       map[string]map[string]map[string]any{},
+		stores:         map[string]map[string]map[string]any{},
+		incidentPls:    map[string]map[string]any{},
+		reviewWfs:      map[string]map[string]any{},
+		channels:       map[string]map[string]any{},
+		chanRoutes:     map[string]map[string]map[string]any{},
+		hostedAgs:      map[string]map[string]any{},
+		outposts:       map[string]map[string]any{},
+		revokedTokens:  map[string]bool{},
+		deletedAgs:     map[string]bool{},
+		heartbeatedAgs: map[string]bool{},
+		selfHostedAgs:  map[string]map[string]any{},
 	}
 	for _, res := range crudRegistry {
 		m.stores[res.collection] = map[string]map[string]any{}
@@ -245,13 +296,6 @@ func (m *mockServer) handle(w http.ResponseWriter, r *http.Request) {
 	case reviewWorkflowIDRe.MatchString(r.URL.Path):
 		m.reviewWorkflowByID(w, r, reviewWorkflowIDRe.FindStringSubmatch(r.URL.Path)[1])
 
-	case r.URL.Path == "/api/v1/grader-configs" && r.Method == http.MethodPost:
-		m.createGraderConfig(w, r)
-	case r.URL.Path == "/api/v1/grader-configs" && r.Method == http.MethodGet:
-		m.listGraderConfigs(w, r)
-	case graderConfigIDRe.MatchString(r.URL.Path):
-		m.graderConfigByID(w, r, graderConfigIDRe.FindStringSubmatch(r.URL.Path)[1])
-
 	case r.URL.Path == "/api/v1/channels" && r.Method == http.MethodPost:
 		m.createChannel(w, r)
 	case channelActionRe.MatchString(r.URL.Path) && r.Method == http.MethodPost:
@@ -265,6 +309,26 @@ func (m *mockServer) handle(w http.ResponseWriter, r *http.Request) {
 	case channelIDRe.MatchString(r.URL.Path):
 		m.channelByID(w, r, channelIDRe.FindStringSubmatch(r.URL.Path)[1])
 
+	case r.URL.Path == "/api/v1/outposts" && r.Method == http.MethodPost:
+		m.createOutpost(w, r)
+	case r.URL.Path == "/api/v1/outposts" && r.Method == http.MethodGet:
+		m.listMaps(w, m.outposts)
+	case outpostInstallRe.MatchString(r.URL.Path) && r.Method == http.MethodGet:
+		m.outpostInstall(w, outpostInstallRe.FindStringSubmatch(r.URL.Path)[1])
+	case outpostIDRe.MatchString(r.URL.Path):
+		m.outpostByID(w, r, outpostIDRe.FindStringSubmatch(r.URL.Path)[1])
+	case serverOutpostRe.MatchString(r.URL.Path):
+		m.serverOutpost(w, r, serverOutpostRe.FindStringSubmatch(r.URL.Path)[1])
+	case serverIDRe.MatchString(r.URL.Path) && r.Method == http.MethodPatch && m.serverUpdateDropsOutpost:
+		m.updateServerWithoutOutpost(w, r, serverIDRe.FindStringSubmatch(r.URL.Path)[1])
+
+	case r.URL.Path == "/api/v1/agents" && r.Method == http.MethodPost:
+		m.createRuntimeAgent(w, r)
+	case agentMcpGroupRe.MatchString(r.URL.Path) && r.Method == http.MethodPatch:
+		m.setAgentMcpGroup(w, r, agentMcpGroupRe.FindStringSubmatch(r.URL.Path)[1])
+	case agentDraftRe.MatchString(r.URL.Path) && r.Method == http.MethodDelete:
+		m.deleteRuntimeAgentDraft(w, agentDraftRe.FindStringSubmatch(r.URL.Path)[1])
+
 	case r.URL.Path == "/api/v1/hosted-agents" && r.Method == http.MethodPost:
 		m.createHostedAgent(w, r)
 	case hostedAgentArchiveRe.MatchString(r.URL.Path) && r.Method == http.MethodPost:
@@ -273,11 +337,18 @@ func (m *mockServer) handle(w http.ResponseWriter, r *http.Request) {
 	case hostedAgentByPathRe.MatchString(r.URL.Path):
 		mm := hostedAgentByPathRe.FindStringSubmatch(r.URL.Path)
 		m.hostedAgentByPath(w, r, mm[1], mm[2])
+	case runtimeAgentArchiveRe.MatchString(r.URL.Path) && r.Method == http.MethodPatch:
+		m.archiveRuntimeAgent(w, runtimeAgentArchiveRe.FindStringSubmatch(r.URL.Path)[1])
 	case runtimeAgentByIDRe.MatchString(r.URL.Path) && r.Method == http.MethodGet:
 		m.runtimeAgentByID(w, runtimeAgentByIDRe.FindStringSubmatch(r.URL.Path)[1])
+	case runtimeAgentByIDRe.MatchString(r.URL.Path) && r.Method == http.MethodDelete:
+		m.deleteRuntimeAgent(w, runtimeAgentByIDRe.FindStringSubmatch(r.URL.Path)[1])
 	case workerCatalogDeployRe.MatchString(r.URL.Path) && r.Method == http.MethodPost:
 		mm := workerCatalogDeployRe.FindStringSubmatch(r.URL.Path)
 		m.deployWorkerCatalog(w, r, mm[1])
+	case workerCatalogSelfHostedDeploy.MatchString(r.URL.Path) && r.Method == http.MethodPost:
+		mm := workerCatalogSelfHostedDeploy.FindStringSubmatch(r.URL.Path)
+		m.selfHostedDeployWorkerCatalog(w, r, mm[1])
 
 	default:
 		if m.dispatchCRUD(w, r) {
@@ -858,60 +929,6 @@ func (m *mockServer) reviewWorkflowAction(w http.ResponseWriter, id, action stri
 	writeJSON(w, http.StatusOK, rec)
 }
 
-func (m *mockServer) createGraderConfig(w http.ResponseWriter, r *http.Request) {
-	body := decode(r)
-	id := m.nextID("grd")
-	rec := cloneMap(body)
-	rec["id"] = id
-	rec["runs_seen"] = 0
-	rec["created_at"] = mockTS
-	rec["updated_at"] = mockTS
-	if rec["sample_rate"] == nil {
-		rec["sample_rate"] = 100
-	}
-	if rec["guidelines"] == nil {
-		rec["guidelines"] = ""
-	}
-	m.graderCfgs[id] = rec
-	writeJSON(w, http.StatusCreated, rec)
-}
-
-func (m *mockServer) listGraderConfigs(w http.ResponseWriter, r *http.Request) {
-	target := r.URL.Query().Get("target_agent_id")
-	out := make([]map[string]any, 0)
-	for _, v := range m.graderCfgs {
-		if target != "" && toString(v["target_agent_id"]) != target {
-			continue
-		}
-		out = append(out, v)
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"configs": out})
-}
-
-func (m *mockServer) graderConfigByID(w http.ResponseWriter, r *http.Request, id string) {
-	rec, ok := m.graderCfgs[id]
-	if !ok {
-		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "grader config not found"})
-		return
-	}
-	switch r.Method {
-	case http.MethodPatch:
-		for k, v := range decode(r) {
-			if v != nil {
-				rec[k] = v
-			}
-		}
-		rec["updated_at"] = mockTS
-		m.graderCfgs[id] = rec
-		writeJSON(w, http.StatusOK, rec)
-	case http.MethodDelete:
-		delete(m.graderCfgs, id)
-		w.WriteHeader(http.StatusNoContent)
-	default:
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{})
-	}
-}
-
 func (m *mockServer) createChannel(w http.ResponseWriter, r *http.Request) {
 	body := decode(r)
 	id := m.nextID("chn")
@@ -1058,6 +1075,214 @@ func (m *mockServer) channelRouteByID(w http.ResponseWriter, r *http.Request, ch
 	}
 }
 
+// createOutpost answers with the outpost, its one-time credential and the install
+// values, the way POST /outposts does.
+func (m *mockServer) createOutpost(w http.ResponseWriter, r *http.Request) {
+	body := decode(r)
+	id := m.nextID("op")
+	rec := map[string]any{
+		"outpost_id": id,
+		"name":       body["name"],
+		"status":     "pending",
+		"connected":  false,
+		"created_at": mockTS,
+		"updated_at": mockTS,
+		"allowlist":  valueOr(body["allowlist"], []any{}),
+		"labels":     valueOr(body["labels"], map[string]any{}),
+	}
+	if v, ok := body["description"]; ok && v != nil {
+		rec["description"] = v
+	}
+	m.outposts[id] = rec
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"outpost":    rec,
+		"credential": map[string]any{"credential": "opc_" + id + "_secret", "hint": "opc_..."},
+		"install":    outpostInstallFor(id),
+	})
+}
+
+func (m *mockServer) outpostByID(w http.ResponseWriter, r *http.Request, id string) {
+	rec, ok := m.outposts[id]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "outpost not found"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, rec)
+	case http.MethodPatch:
+		// A partial update: an omitted field is left alone, and a supplied
+		// allowlist/labels replaces wholesale. Clearing needs an explicit empty.
+		for k, v := range decode(r) {
+			if v != nil {
+				rec[k] = v
+			}
+		}
+		rec["updated_at"] = mockTS
+		m.outposts[id] = rec
+		writeJSON(w, http.StatusOK, rec)
+	case http.MethodDelete:
+		delete(m.outposts, id)
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{})
+	}
+}
+
+func (m *mockServer) outpostInstall(w http.ResponseWriter, id string) {
+	if _, ok := m.outposts[id]; !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "outpost not found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, outpostInstallFor(id))
+}
+
+func outpostInstallFor(id string) map[string]any {
+	return map[string]any{
+		"chart":                  "oci://ghcr.io/komodorio/charts/agentops-outpost",
+		"command":                "helm install " + id + " agentops-outpost",
+		"upgrade_command":        "helm upgrade " + id + " agentops-outpost",
+		"values":                 "outpostId: " + id + "\n",
+		"upgrade_values":         "outpostId: " + id + "\n",
+		"namespace":              "agentops",
+		"release_name":           id,
+		"credential_secret_name": id + "-credential",
+		"credential_secret_key":  "credential",
+	}
+}
+
+// serverOutpost binds or unbinds an upstream's egress. The binding lives on the
+// server record, which is what the server read echoes back as outpost_id.
+func (m *mockServer) serverOutpost(w http.ResponseWriter, r *http.Request, serverID string) {
+	rec, ok := m.stores["/api/v1/gateway/admin/servers"][serverID]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "server not found"})
+		return
+	}
+	switch r.Method {
+	case http.MethodPut:
+		outpostID := toString(decode(r)["outpost_id"])
+		if _, known := m.outposts[outpostID]; !known {
+			writeJSON(w, http.StatusNotFound, map[string]any{"detail": "outpost not found"})
+			return
+		}
+		rec["outpost_id"] = outpostID
+		writeJSON(w, http.StatusOK, map[string]any{"server_id": serverID, "outpost_id": outpostID})
+	case http.MethodDelete:
+		delete(rec, "outpost_id")
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{})
+	}
+}
+
+// updateServerWithoutOutpost patches a server and answers without outpost_id, the
+// shape the real update takes because UpdateServerRequest has no outpost field.
+func (m *mockServer) updateServerWithoutOutpost(w http.ResponseWriter, r *http.Request, serverID string) {
+	rec, ok := m.stores["/api/v1/gateway/admin/servers"][serverID]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "server not found"})
+		return
+	}
+	for k, v := range decode(r) {
+		if v != nil {
+			rec[k] = v
+		}
+	}
+	echo := cloneMap(rec)
+	delete(echo, "outpost_id")
+	writeJSON(w, http.StatusOK, echo)
+}
+
+// serverOutpostBinding reports the outpost an upstream is bound to, for assertions
+// the Terraform state cannot make on its own.
+func (m *mockServer) serverOutpostBinding(serverID string) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return toString(m.stores["/api/v1/gateway/admin/servers"][serverID]["outpost_id"])
+}
+
+// outpostRecord returns a copy of a stored outpost, for assertions on what an
+// update actually wrote.
+func (m *mockServer) outpostRecord(id string) map[string]any {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return cloneMap(m.outposts[id])
+}
+
+// unbindAgentMcpGroup drops an agent's MCP group behind Terraform's back, the way
+// someone unbinding it in the UI or by a direct API call would.
+func (m *mockServer) unbindAgentMcpGroup(agentID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if rec, ok := m.selfHostedAgs[agentID]; ok {
+		delete(rec, "mcp_group_id")
+	}
+}
+
+// bindAgentMcpGroup binds a group behind Terraform's back, standing in for a
+// binding the resource does not own — a catalog entry's own group, or one someone
+// attached in the UI.
+func (m *mockServer) bindAgentMcpGroup(agentID, groupID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if rec, ok := m.selfHostedAgs[agentID]; ok {
+		rec["mcp_group_id"] = groupID
+	}
+}
+
+// agentMcpGroup reports the group actually bound on the control plane, so a test
+// can tell a converged apply from state that merely claims to be converged.
+func (m *mockServer) agentMcpGroup(agentID string) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return toString(m.selfHostedAgs[agentID]["mcp_group_id"])
+}
+
+// createRuntimeAgent registers a self-hosted agent and renders its Helm values,
+// the way POST /agents does.
+func (m *mockServer) createRuntimeAgent(w http.ResponseWriter, r *http.Request) {
+	body := decode(r)
+	slug := toString(body["agentId"])
+	opaqueID := m.nextID("ag")
+	name := toString(body["displayName"])
+	if name == "" {
+		name = slug
+	}
+	agent := map[string]any{
+		"agent_id": opaqueID, "id_slug": slug, "status": "draft", "name": name,
+		"created_at": mockTS, "is_archived": false,
+	}
+	m.selfHostedAgs[opaqueID] = agent
+	m.selfHostedAgs[slug] = agent
+	writeJSON(w, http.StatusOK, map[string]any{
+		"agentId":         opaqueID,
+		"values":          "workerToken: wt_" + slug + "_secret\n",
+		"command":         "helm install " + slug + " agentops-agent-base",
+		"workerTokenHint": "wt_" + firstN(slug, 4) + "...",
+	})
+}
+
+func (m *mockServer) setAgentMcpGroup(w http.ResponseWriter, r *http.Request, agentID string) {
+	if m.mcpGroupBindFails {
+		writeJSON(w, http.StatusForbidden, map[string]any{"detail": "mcp group binding refused"})
+		return
+	}
+	rec, ok := m.selfHostedAgs[agentID]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "agent not found"})
+		return
+	}
+	// The control plane coerces the request through `mcp_group_id or None`, so an
+	// empty id is an unbind and every later read reports null rather than "".
+	if v := decode(r)["mcp_group_id"]; v != nil && v != "" && !m.mcpGroupBindSilent {
+		rec["mcp_group_id"] = v
+	} else if v == nil || v == "" {
+		delete(rec, "mcp_group_id")
+	}
+	writeJSON(w, http.StatusOK, rec)
+}
+
 func (m *mockServer) createHostedAgent(w http.ResponseWriter, r *http.Request) {
 	body := decode(r)
 	customer := toString(body["customer"])
@@ -1098,8 +1323,21 @@ func (m *mockServer) initialHostedStatus() string {
 // runtimeAgentByID serves the runtime agent record, the only one carrying the
 // deploy outcome.
 func (m *mockServer) runtimeAgentByID(w http.ResponseWriter, agentID string) {
+	if m.agentReadFails > 0 {
+		m.agentReadFails--
+		writeJSON(w, http.StatusForbidden, map[string]any{"detail": "read refused"})
+		return
+	}
 	if m.runtimeNotFound > 0 {
 		m.runtimeNotFound--
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "agent not found"})
+		return
+	}
+	if rec, ok := m.selfHostedAgs[agentID]; ok {
+		writeJSON(w, http.StatusOK, rec)
+		return
+	}
+	if m.deletedAgs[agentID] {
 		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "agent not found"})
 		return
 	}
@@ -1174,6 +1412,165 @@ func (m *mockServer) deployWorkerCatalog(w http.ResponseWriter, r *http.Request,
 	writeJSON(w, http.StatusCreated, rec)
 }
 
+// selfHostedDeployWorkerCatalog mints a worker token for a catalog entry the
+// operator will run themselves. With selfHostedTriggerFails or
+// selfHostedMcpGroupFails set it answers 207, the partial success the real
+// endpoint returns when the agent was created but something it asked for was not.
+// Both may be set at once, which is what the real endpoint does when a settings
+// field and a trigger both fail.
+func (m *mockServer) selfHostedDeployWorkerCatalog(w http.ResponseWriter, r *http.Request, catalogID string) {
+	body := decode(r)
+	// The friendly slug defaults to the catalog entry's own id, and the response
+	// carries only the opaque id — never the slug. Both address the agent.
+	slug := toString(body["agentId"])
+	if slug == "" {
+		slug = catalogID
+	}
+	opaqueID := m.nextID("ag")
+	agent := map[string]any{
+		"agent_id": opaqueID, "id_slug": slug, "status": "draft", "name": slug, "created_at": mockTS,
+	}
+	// The deploy request's mcpGroupId is folded into the agent settings and applied
+	// onto the agent row, so GET /agents/{id} echoes it from here on.
+	if v := body["mcpGroupId"]; v != nil && !m.selfHostedMcpGroupFails {
+		agent["mcp_group_id"] = v
+	}
+	m.selfHostedAgs[opaqueID] = agent
+	m.selfHostedAgs[slug] = agent
+
+	rec := map[string]any{
+		"agentId":         opaqueID,
+		"token":           "wt_" + slug + "_secret",
+		"workerTokenHint": "wt_" + firstN(slug, 4) + "...",
+	}
+	if m.selfHostedMcpGroupFails {
+		rec["settings"] = map[string]any{"sections": []any{map[string]any{
+			"section": "mcp_group_id",
+			"status":  "failed",
+			"error":   "mcp group could not be bound",
+			"retry":   "PATCH /api/v1/agents/" + opaqueID + "/mcp-group",
+		}}}
+	}
+	if m.selfHostedTriggerFails {
+		rec["triggers"] = []any{map[string]any{
+			"name":   "nightly",
+			"status": "failed",
+			"type":   "schedule",
+			"error":  "cron rejected",
+			"retry":  "POST /api/v1/agents/" + opaqueID + "/triggers",
+		}}
+	}
+	if m.selfHostedMcpGroupFails || m.selfHostedTriggerFails {
+		writeJSON(w, http.StatusMultiStatus, rec)
+		return
+	}
+	writeJSON(w, http.StatusCreated, rec)
+}
+
+func firstN(s string, n int) string {
+	if len(s) < n {
+		return s
+	}
+	return s[:n]
+}
+
+func (m *mockServer) archiveRuntimeAgent(w http.ResponseWriter, agentID string) {
+	if rec, ok := m.selfHostedAgs[agentID]; ok {
+		rec["is_archived"] = true
+		rec["status"] = "archived"
+		rec["instances_total"] = 0
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"agent_id": agentID, "status": "archived"})
+}
+
+// deleteAgentMode selects how the mock answers DELETE /api/v1/agents/{id}. The
+// real route is gated on the self_hosted_agent_lifecycle flag and 404s while the
+// flag is off, which is indistinguishable by status alone from the agent being
+// gone. 404 and not a 5xx throughout, because the client retries 5xx away.
+type deleteAgentMode string
+
+const (
+	// deleteAgentNormal is the default: 204, and the record is removed.
+	deleteAgentNormal deleteAgentMode = ""
+	// deleteAgentLifecycleOff is the feature gate shut — 404 carrying the control
+	// plane's detail string, and the agent survives.
+	deleteAgentLifecycleOff deleteAgentMode = "lifecycle_off"
+	// deleteAgentOpaque404 is a 404 whose body says nothing useful while the agent
+	// survives, so only a follow-up read can tell it from "already gone".
+	deleteAgentOpaque404 deleteAgentMode = "opaque_404"
+	// deleteAgentAlreadyGone is the genuine race: the record is gone and the delete
+	// 404s, which a destroy must keep accepting silently.
+	deleteAgentAlreadyGone deleteAgentMode = "already_gone"
+	// deleteAgentGateOnMissing is both at once: the control plane checks the gate
+	// before it looks the agent up, so an agent that is not there gets the same
+	// gate 404 as a live one. The record is dropped before the answer, so the
+	// follow-up read 404s and the destroy has nothing left to do.
+	deleteAgentGateOnMissing deleteAgentMode = "gate_on_missing"
+)
+
+func (m *mockServer) deleteRuntimeAgent(w http.ResponseWriter, agentID string) {
+	switch m.deleteAgentAnswer {
+	case deleteAgentLifecycleOff:
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "self-hosted agent lifecycle is not enabled for this account"})
+		return
+	case deleteAgentOpaque404:
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "Not Found"})
+		return
+	case deleteAgentGateOnMissing:
+		m.forgetRuntimeAgent(agentID)
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "self-hosted agent lifecycle is not enabled for this account"})
+		return
+	}
+	m.forgetRuntimeAgent(agentID)
+	if m.deleteAgentAnswer == deleteAgentAlreadyGone {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "agent not found"})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// deleteRuntimeAgentDraft serves DELETE /agents/{id}/draft, the delete that is not
+// behind self_hosted_agent_lifecycle. It hard-deletes an agent that has never
+// heartbeated and 409s for one that has.
+func (m *mockServer) deleteRuntimeAgentDraft(w http.ResponseWriter, agentID string) {
+	if m.deletedAgs[agentID] {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "agent not found"})
+		return
+	}
+	if m.heartbeatedAgs[agentID] {
+		writeJSON(w, http.StatusConflict, map[string]any{"detail": "agent is not a draft"})
+		return
+	}
+	m.forgetRuntimeAgent(agentID)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// markAgentHeartbeated stands in for a worker that has come online, which puts the
+// agent out of reach of the draft delete. Marked under every key the record
+// answers to, since a caller may hold either the slug or the opaque id.
+func (m *mockServer) markAgentHeartbeated(agentID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.heartbeatedAgs[agentID] = true
+	if rec, ok := m.selfHostedAgs[agentID]; ok {
+		m.heartbeatedAgs[toString(rec["id_slug"])] = true
+		m.heartbeatedAgs[toString(rec["agent_id"])] = true
+	}
+}
+
+// forgetRuntimeAgent drops a self-hosted agent under every key it answers to and
+// remembers it as deleted, so a later read 404s instead of falling through to the
+// synthesized record. Called with m.mu already held by the handler.
+func (m *mockServer) forgetRuntimeAgent(agentID string) {
+	if rec, ok := m.selfHostedAgs[agentID]; ok {
+		delete(m.selfHostedAgs, toString(rec["id_slug"]))
+		delete(m.selfHostedAgs, toString(rec["agent_id"]))
+		m.deletedAgs[toString(rec["id_slug"])] = true
+		m.deletedAgs[toString(rec["agent_id"])] = true
+	}
+	m.deletedAgs[agentID] = true
+}
+
 func (m *mockServer) hostedAgentByPath(w http.ResponseWriter, r *http.Request, customer, agentID string) {
 	key := customer + "/" + agentID
 	rec, ok := m.hostedAgs[key]
@@ -1219,6 +1616,26 @@ func (m *mockServer) hostedAgentByPath(w http.ResponseWriter, r *http.Request, c
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{})
 	}
+}
+
+// mcpServerCount reports how many gateway servers the control plane still holds,
+// for assertions that a create left nothing behind.
+func (m *mockServer) mcpServerCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.stores["/api/v1/gateway/admin/servers"])
+}
+
+// runtimeAgentCount reports how many distinct agents are registered. Each is
+// stored under both its opaque id and its slug.
+func (m *mockServer) runtimeAgentCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	seen := map[string]bool{}
+	for _, rec := range m.selfHostedAgs {
+		seen[toString(rec["agent_id"])] = true
+	}
+	return len(seen)
 }
 
 // tokenRevoked reports whether the delete revoked this agent's worker token.

@@ -130,8 +130,9 @@ func (r *incidentPipelineResource) Schema(ctx context.Context, req resource.Sche
 				PlanModifiers:       []planmodifier.Object{objectplanmodifier.RequiresReplace()},
 				Attributes: map[string]schema.Attribute{
 					"provider": schema.StringAttribute{
-						MarkdownDescription: "Alert provider. One of `datadog`, `generic`.",
-						Required:            true,
+						MarkdownDescription: "Alert provider. One of `datadog`, `grafana`, `alertmanager`, " +
+							"`pagerduty`, `opsgenie`, `generic`.",
+						Required: true,
 					},
 					"monitor_mode": schema.StringAttribute{
 						MarkdownDescription: "How the pipeline binds to the provider's monitor. One of " +
