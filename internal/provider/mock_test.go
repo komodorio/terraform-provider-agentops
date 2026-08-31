@@ -67,6 +67,11 @@ type mockServer struct {
 	// selfHostedTriggerFails makes the self-hosted deploy answer 207 with one failed
 	// trigger, the partial success the resource must keep rather than roll back.
 	selfHostedTriggerFails bool
+	// selfHostedMcpGroupFails makes the self-hosted deploy answer 207 with a failed
+	// mcp_group_id settings section and no group bound. The real endpoint applies
+	// settings after the token is minted and reports per-field failure instead of
+	// raising, so the post-deploy read can honestly report no group at all.
+	selfHostedMcpGroupFails bool
 	// agentReadFails is how many GET /agents/{id} reads are refused before the
 	// record is served again, standing in for a read that fails right after a
 	// mutation. 403 rather than a 5xx because the client retries 5xx away.
@@ -74,6 +79,10 @@ type mockServer struct {
 	// mcpGroupBindFails refuses PATCH /agents/{id}/mcp-group, the follow-up call a
 	// create makes after the agent is already registered.
 	mcpGroupBindFails bool
+	// mcpGroupBindSilent accepts PATCH /agents/{id}/mcp-group without recording it,
+	// so the agent read that follows does not echo the group back. It stands in for
+	// a bind the control plane took but the read has not caught up with.
+	mcpGroupBindSilent bool
 	// serverUpdateDropsOutpost makes PATCH /gateway/admin/servers/{id} answer without
 	// an outpost_id. The real UpdateServerRequest has no outpost field, so its
 	// response can echo null for a server that is bound.
@@ -1192,6 +1201,35 @@ func (m *mockServer) outpostRecord(id string) map[string]any {
 	return cloneMap(m.outposts[id])
 }
 
+// unbindAgentMcpGroup drops an agent's MCP group behind Terraform's back, the way
+// someone unbinding it in the UI or by a direct API call would.
+func (m *mockServer) unbindAgentMcpGroup(agentID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if rec, ok := m.selfHostedAgs[agentID]; ok {
+		delete(rec, "mcp_group_id")
+	}
+}
+
+// bindAgentMcpGroup binds a group behind Terraform's back, standing in for a
+// binding the resource does not own — a catalog entry's own group, or one someone
+// attached in the UI.
+func (m *mockServer) bindAgentMcpGroup(agentID, groupID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if rec, ok := m.selfHostedAgs[agentID]; ok {
+		rec["mcp_group_id"] = groupID
+	}
+}
+
+// agentMcpGroup reports the group actually bound on the control plane, so a test
+// can tell a converged apply from state that merely claims to be converged.
+func (m *mockServer) agentMcpGroup(agentID string) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return toString(m.selfHostedAgs[agentID]["mcp_group_id"])
+}
+
 // createRuntimeAgent registers a self-hosted agent and renders its Helm values,
 // the way POST /agents does.
 func (m *mockServer) createRuntimeAgent(w http.ResponseWriter, r *http.Request) {
@@ -1226,9 +1264,9 @@ func (m *mockServer) setAgentMcpGroup(w http.ResponseWriter, r *http.Request, ag
 		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "agent not found"})
 		return
 	}
-	if v := decode(r)["mcp_group_id"]; v != nil {
+	if v := decode(r)["mcp_group_id"]; v != nil && !m.mcpGroupBindSilent {
 		rec["mcp_group_id"] = v
-	} else {
+	} else if v == nil {
 		delete(rec, "mcp_group_id")
 	}
 	writeJSON(w, http.StatusOK, rec)
@@ -1379,6 +1417,11 @@ func (m *mockServer) selfHostedDeployWorkerCatalog(w http.ResponseWriter, r *htt
 	agent := map[string]any{
 		"agent_id": opaqueID, "id_slug": slug, "status": "draft", "name": slug, "created_at": mockTS,
 	}
+	// The deploy request's mcpGroupId is folded into the agent settings and applied
+	// onto the agent row, so GET /agents/{id} echoes it from here on.
+	if v := body["mcpGroupId"]; v != nil && !m.selfHostedMcpGroupFails {
+		agent["mcp_group_id"] = v
+	}
 	m.selfHostedAgs[opaqueID] = agent
 	m.selfHostedAgs[slug] = agent
 
@@ -1386,6 +1429,16 @@ func (m *mockServer) selfHostedDeployWorkerCatalog(w http.ResponseWriter, r *htt
 		"agentId":         opaqueID,
 		"token":           "wt_" + slug + "_secret",
 		"workerTokenHint": "wt_" + firstN(slug, 4) + "...",
+	}
+	if m.selfHostedMcpGroupFails {
+		rec["settings"] = map[string]any{"sections": []any{map[string]any{
+			"section": "mcp_group_id",
+			"status":  "failed",
+			"error":   "mcp group could not be bound",
+			"retry":   "PATCH /api/v1/agents/" + opaqueID + "/mcp-group",
+		}}}
+		writeJSON(w, http.StatusMultiStatus, rec)
+		return
 	}
 	if m.selfHostedTriggerFails {
 		rec["triggers"] = []any{map[string]any{

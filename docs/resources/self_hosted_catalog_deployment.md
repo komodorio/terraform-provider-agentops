@@ -74,7 +74,7 @@ resource "kubernetes_secret" "worker_token" {
 - `credential_ref` (String) Name of the LLM credential the worker runs with. Must be one of the catalog entry's allowed credentials; the server picks the default when omitted. Write-only. Changing this forces a new deployment.
 - `display_name` (String) Human-readable name for the deployed worker. Write-only. Changing this forces a new deployment.
 - `integration_connections` (Map of String) Integration connections to bind at deploy time, keyed by the provider the catalog entry requires. Write-only. Changing this forces a new deployment.
-- `mcp_group_id` (String) ID of an MCP gateway group to attach. Can be changed without redeploying — rebinding the group does not rotate the worker token.
+- `mcp_group_id` (String) ID of an MCP gateway group to attach. Can be changed without redeploying — rebinding the group does not rotate the worker token. Left unmanaged while unset: a group bound outside Terraform is not adopted into state. Once set, the binding is reconciled on every plan, so unbinding it out of band plans a re-bind.
 
 ### Read-Only
 

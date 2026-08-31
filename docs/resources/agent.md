@@ -24,7 +24,7 @@ A self-hosted KaOps agent. Creating this resource registers the agent with the c
 
 - `credential_ref` (String) Name of the LLM credential configured on the account (not the secret value).
 - `display_name` (String) Human-readable display name shown in the UI.
-- `mcp_group_id` (String) MCP gateway group to bind to this agent. Can be changed without recreating the agent.
+- `mcp_group_id` (String) MCP gateway group to bind to this agent. Can be changed without recreating the agent. Left unmanaged while unset: a group bound outside Terraform is not adopted into state. Once set, the binding is reconciled on every plan, so unbinding it out of band plans a re-bind.
 - `model` (String) LLM model the agent uses (e.g. `claude-opus-4-8`).
 
 ### Read-Only

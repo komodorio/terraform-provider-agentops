@@ -96,8 +96,9 @@ func (r *agentResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 				PlanModifiers:       []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"mcp_group_id": schema.StringAttribute{
-				MarkdownDescription: "MCP gateway group to bind to this agent. Can be changed without recreating the agent.",
-				Optional:            true,
+				MarkdownDescription: "MCP gateway group to bind to this agent. Can be changed without recreating " +
+					"the agent. " + mcpGroupDriftNote,
+				Optional: true,
 			},
 
 			"install_values": schema.StringAttribute{
@@ -231,7 +232,7 @@ func (r *agentResource) Read(ctx context.Context, req resource.ReadRequest, resp
 		return
 	}
 
-	agentApplyInstance(&state, apiResp.JSON200)
+	agentApplyInstance(&state, apiResp.JSON200, phaseRefresh)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -418,11 +419,11 @@ func (r *agentResource) refreshFromGetAPI(ctx context.Context, m *agentResourceM
 		return
 	}
 	if apiResp.JSON200 != nil {
-		agentApplyInstance(m, apiResp.JSON200)
+		agentApplyInstance(m, apiResp.JSON200, phaseApply)
 	}
 }
 
-func agentApplyInstance(m *agentResourceModel, inst *gen.AgentInstanceResponse) {
+func agentApplyInstance(m *agentResourceModel, inst *gen.AgentInstanceResponse, phase readPhase) {
 	m.ID = types.StringValue(inst.AgentId)
 	if inst.IdSlug != nil && *inst.IdSlug != "" {
 		m.AgentID = types.StringValue(*inst.IdSlug)
@@ -432,9 +433,7 @@ func agentApplyInstance(m *agentResourceModel, inst *gen.AgentInstanceResponse) 
 	m.IsArchived = boolPtrToBool(inst.IsArchived)
 	m.CreatedAt = ptrToString(inst.CreatedAt)
 
-	if inst.McpGroupId != nil && *inst.McpGroupId != "" {
-		m.McpGroupID = types.StringValue(*inst.McpGroupId)
-	}
+	m.McpGroupID = reconcileManagedOptional(phase, m.McpGroupID, strOrNull(enumPtrToString(inst.McpGroupId)))
 }
 
 const agentDeleteWaitTimeout = 90 * time.Second

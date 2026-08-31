@@ -199,3 +199,88 @@ func TestAccAgentResource_deleteAlreadyGoneSucceeds(t *testing.T) {
 		},
 	})
 }
+
+// TestAccAgentResource_mcpGroupOutOfBandUnbind is the refresh half of the same
+// contract the self-hosted deployment owes. The binding is made by a separate
+// PATCH, so nothing about the agent's own record changes when someone unbinds the
+// group outside Terraform — and if the read only ever adopts a non-empty group,
+// the stale value survives and the plan reports no changes for good, while the
+// agent runs with no MCP group.
+func TestAccAgentResource_mcpGroupOutOfBandUnbind(t *testing.T) {
+	mock := newMockServer(t)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccAgentConfig(mock.URL, "grp_1"),
+				Check:  resource.TestCheckResourceAttr("agentops_agent.test", "mcp_group_id", "grp_1"),
+			},
+			{
+				PreConfig:          func() { mock.unbindAgentMcpGroup("incident-responder") },
+				Config:             testAccAgentConfig(mock.URL, "grp_1"),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+			{
+				Config: testAccAgentConfig(mock.URL, "grp_1"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("agentops_agent.test", "mcp_group_id", "grp_1"),
+					func(*terraform.State) error {
+						if got := mock.agentMcpGroup("incident-responder"); got != "grp_1" {
+							return fmt.Errorf("control plane bound group %q after the drift apply, want grp_1", got)
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
+// TestAccAgentResource_mcpGroupAbsentIgnoresForeignBinding covers the
+// configuration that never mentions mcp_group_id: a group attached elsewhere is
+// not adopted into state, so the next plan neither shows a diff nor tears the
+// binding out.
+func TestAccAgentResource_mcpGroupAbsentIgnoresForeignBinding(t *testing.T) {
+	mock := newMockServer(t)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccAgentConfig(mock.URL, ""),
+				Check:  resource.TestCheckNoResourceAttr("agentops_agent.test", "mcp_group_id"),
+			},
+			{
+				PreConfig: func() { mock.bindAgentMcpGroup("incident-responder", "grp_foreign") },
+				Config:    testAccAgentConfig(mock.URL, ""),
+				PlanOnly:  true,
+				Check:     resource.TestCheckNoResourceAttr("agentops_agent.test", "mcp_group_id"),
+			},
+		},
+	})
+}
+
+// TestAccAgentResource_mcpGroupBindNotEchoed pins the apply half: the bind is a
+// separate call the agent read is not obliged to echo back in the same instant,
+// and mcp_group_id is Optional and not Computed, so the post-create read must not
+// be allowed to overwrite the plan with what it happened to see.
+func TestAccAgentResource_mcpGroupBindNotEchoed(t *testing.T) {
+	mock := newMockServer(t)
+	mock.tune(func(m *mockServer) { m.mcpGroupBindSilent = true })
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:             testAccAgentConfig(mock.URL, "grp_1"),
+				Check:              resource.TestCheckResourceAttr("agentops_agent.test", "mcp_group_id", "grp_1"),
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}

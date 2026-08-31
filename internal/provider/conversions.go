@@ -158,3 +158,39 @@ func normalizeOptionalString(v types.String) types.String {
 	}
 	return v
 }
+
+// readPhase distinguishes the two reads a resource makes of the same API record,
+// which owe the state different things.
+type readPhase int
+
+const (
+	// phaseRefresh is a plain Read. State must report what the API reports, or
+	// an out-of-band change is never planned as drift.
+	phaseRefresh readPhase = iota
+	// phaseApply is the read a Create or Update runs after its own mutation.
+	// Terraform requires the final state of an Optional, non-Computed attribute
+	// to equal the plan, so this read may not overwrite it.
+	phaseApply
+)
+
+// reconcileManagedOptional resolves an Optional, non-Computed attribute against
+// what the API reported. On apply the planned value wins — the API accepted it,
+// and a post-mutation read that does not echo it back would otherwise be written
+// to state as an inconsistent apply result. On refresh the observed value wins,
+// so an out-of-band change plans a diff instead of hiding behind stale state.
+// An attribute the configuration never set stays null either way: the resource
+// manages the binding only when it owns one, and adopting a binding made
+// elsewhere would tear it out on the next apply.
+func reconcileManagedOptional(phase readPhase, planned, observed types.String) types.String {
+	if planned.IsNull() || planned.IsUnknown() {
+		return types.StringNull()
+	}
+	if phase == phaseApply {
+		return planned
+	}
+	return observed
+}
+
+// mcpGroupDriftNote documents reconcileManagedOptional's contract on every
+// mcp_group_id attribute, so the generated docs say the same thing in each place.
+const mcpGroupDriftNote = "Left unmanaged while unset: a group bound outside Terraform is not adopted into state. Once set, the binding is reconciled on every plan, so unbinding it out of band plans a re-bind."

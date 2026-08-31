@@ -117,7 +117,7 @@ func (r *selfHostedCatalogDeploymentResource) Schema(ctx context.Context, req re
 			},
 			"mcp_group_id": schema.StringAttribute{
 				MarkdownDescription: "ID of an MCP gateway group to attach. Can be changed without redeploying — " +
-					"rebinding the group does not rotate the worker token.",
+					"rebinding the group does not rotate the worker token. " + mcpGroupDriftNote,
 				Optional: true,
 			},
 			"integration_connections": schema.MapAttribute{
@@ -255,7 +255,7 @@ func (r *selfHostedCatalogDeploymentResource) Read(ctx context.Context, req reso
 
 	// Only the agent's own fields are refreshed; the token and the write-only
 	// deploy inputs are preserved from state because the API never returns them.
-	selfHostedCatalogDeploymentApplyInstance(&state, apiResp.JSON200)
+	selfHostedCatalogDeploymentApplyInstance(&state, apiResp.JSON200, phaseRefresh)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -340,23 +340,19 @@ func (r *selfHostedCatalogDeploymentResource) refreshAgent(ctx context.Context, 
 		return
 	}
 	if apiResp.JSON200 != nil {
-		selfHostedCatalogDeploymentApplyInstance(m, apiResp.JSON200)
+		selfHostedCatalogDeploymentApplyInstance(m, apiResp.JSON200, phaseApply)
 	}
 }
 
 // selfHostedCatalogDeploymentApplyInstance writes the agent's own fields into the
 // model, leaving the token and the write-only deploy inputs untouched.
-func selfHostedCatalogDeploymentApplyInstance(m *selfHostedCatalogDeploymentResourceModel, inst *gen.AgentInstanceResponse) {
+func selfHostedCatalogDeploymentApplyInstance(m *selfHostedCatalogDeploymentResourceModel, inst *gen.AgentInstanceResponse, phase readPhase) {
 	// Never overwrite a configured slug: the account, not the API, is its source
 	// of truth, and a normalized echo would read as an inconsistent apply result.
 	if (m.AgentID.IsNull() || m.AgentID.IsUnknown()) && inst.IdSlug != nil && *inst.IdSlug != "" {
 		m.AgentID = types.StringValue(*inst.IdSlug)
 	}
-	// Drift is tracked only for a binding this resource made: a catalog entry may
-	// bind an MCP group of its own, and adopting that would plan a permanent diff.
-	if !m.McpGroupID.IsNull() && !m.McpGroupID.IsUnknown() {
-		m.McpGroupID = strOrNull(enumPtrToString(inst.McpGroupId))
-	}
+	m.McpGroupID = reconcileManagedOptional(phase, m.McpGroupID, strOrNull(enumPtrToString(inst.McpGroupId)))
 	m.Status = types.StringValue(string(inst.Status))
 	m.Name = ptrToString(inst.Name)
 	m.IsArchived = boolPtrToBool(inst.IsArchived)
@@ -364,29 +360,55 @@ func selfHostedCatalogDeploymentApplyInstance(m *selfHostedCatalogDeploymentReso
 }
 
 // selfHostedDeployPartialDetail renders the failed entries of a 207 response as
-// warning detail, including the per-trigger retry endpoint the API hands back.
+// warning detail, including the per-item retry endpoint the API hands back.
 func selfHostedDeployPartialDetail(d *gen.WorkerCatalogSelfHostedDeployResponse) string {
-	if d.Triggers == nil {
-		return "The control plane reported a partial deploy. The agent and its worker token were created."
-	}
-	var lines []string
-	for _, t := range *d.Triggers {
-		if !strings.EqualFold(string(t.Status), "failed") {
-			continue
+	const generic = "The control plane reported a partial deploy. The agent and its worker token were created."
+
+	var sections []string
+	if d.Settings != nil && d.Settings.Sections != nil {
+		for _, s := range *d.Settings.Sections {
+			if !strings.EqualFold(string(s.Status), "failed") {
+				continue
+			}
+			sections = append(sections, retryLine(fmt.Sprintf("- setting %q: %s", s.Section, ptrOrDash(s.Error)), s.Retry))
 		}
-		line := fmt.Sprintf("- %s trigger %q: %s", t.Type, ptrOrDash(t.Name), ptrOrDash(t.Error))
-		if t.Retry != nil && *t.Retry != "" {
-			line += fmt.Sprintf(" (retry: %s)", *t.Retry)
+	}
+
+	var triggers []string
+	if d.Triggers != nil {
+		for _, t := range *d.Triggers {
+			if !strings.EqualFold(string(t.Status), "failed") {
+				continue
+			}
+			triggers = append(triggers, retryLine(
+				fmt.Sprintf("- %s trigger %q: %s", t.Type, ptrOrDash(t.Name), ptrOrDash(t.Error)), t.Retry))
 		}
-		lines = append(lines, line)
 	}
-	if len(lines) == 0 {
-		return "The control plane reported a partial deploy. The agent and its worker token were created."
+
+	var out []string
+	if len(sections) > 0 {
+		sort.Strings(sections)
+		out = append(out, "The agent and its worker token were created, but these settings were not applied. "+
+			"mcp_group_id is the one this resource tracks: the next plan reads the agent back, sees it missing "+
+			"and re-binds it in place, without rotating the worker token.\n"+strings.Join(sections, "\n"))
 	}
-	sort.Strings(lines)
-	return "The agent and its worker token were created, but these triggers were not. Re-running apply will " +
-		"not fix them — create them with the agentops_trigger resource or the retry endpoint below, because " +
-		"re-deploying rotates the worker token.\n" + strings.Join(lines, "\n")
+	if len(triggers) > 0 {
+		sort.Strings(triggers)
+		out = append(out, "The agent and its worker token were created, but these triggers were not. Re-running "+
+			"apply will not fix them — create them with the agentops_trigger resource or the retry endpoint "+
+			"below, because re-deploying rotates the worker token.\n"+strings.Join(triggers, "\n"))
+	}
+	if len(out) == 0 {
+		return generic
+	}
+	return strings.Join(out, "\n\n")
+}
+
+func retryLine(line string, retry *string) string {
+	if retry == nil || *retry == "" {
+		return line
+	}
+	return line + fmt.Sprintf(" (retry: %s)", *retry)
 }
 
 func ptrOrDash(p *string) string {
