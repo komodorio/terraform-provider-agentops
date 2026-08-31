@@ -108,3 +108,94 @@ func TestAccAgentResource_mcpBindFailureKeepsAgent(t *testing.T) {
 		},
 	})
 }
+
+// TestAccAgentResource_deleteGatedByLifecycleFlagFailsLoudly pins the destroy
+// contract when DELETE /agents/{id} is refused. The route is gated on the
+// self_hosted_agent_lifecycle feature flag, which is off by default, and answers
+// 404 while it is shut. Reading that 404 as "already gone" drops a live agent —
+// still registered, still holding a worker token the cluster is using — out of
+// state, and a later apply reusing the id adopts it and rotates that token.
+func TestAccAgentResource_deleteGatedByLifecycleFlagFailsLoudly(t *testing.T) {
+	mock := newMockServer(t)
+	mock.tune(func(m *mockServer) { m.deleteAgentAnswer = deleteAgentLifecycleOff })
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccAgentConfig(mock.URL, ""),
+				Check:  resource.TestCheckResourceAttr("agentops_agent.test", "agent_id", "incident-responder"),
+			},
+			{
+				Config:      testAccAgentConfig(mock.URL, ""),
+				Destroy:     true,
+				ExpectError: regexp.MustCompile("self_hosted_agent_lifecycle"),
+			},
+			{
+				Config: testAccAgentConfig(mock.URL, ""),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					// The refused destroy left the agent alive; the resource is still
+					// in state, so the same config plans clean rather than recreating.
+					func(*terraform.State) error {
+						if got := mock.runtimeAgentCount(); got != 1 {
+							return fmt.Errorf("control plane holds %d agent(s) after the refused destroy, want 1", got)
+						}
+						// Lift the gate so the framework's own teardown destroy can finish.
+						mock.tune(func(m *mockServer) { m.deleteAgentAnswer = deleteAgentNormal })
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
+// TestAccAgentResource_deleteOpaque404WithSurvivingAgentFails is the same contract
+// without the tell-tale detail string: a bare 404 is only "already gone" if the
+// agent is actually gone, so the destroy is confirmed with a read (the read path
+// is never feature-gated) rather than trusted from the status code alone.
+func TestAccAgentResource_deleteOpaque404WithSurvivingAgentFails(t *testing.T) {
+	mock := newMockServer(t)
+	mock.tune(func(m *mockServer) { m.deleteAgentAnswer = deleteAgentOpaque404 })
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{Config: testAccAgentConfig(mock.URL, "")},
+			{
+				Config:      testAccAgentConfig(mock.URL, ""),
+				Destroy:     true,
+				ExpectError: regexp.MustCompile("still registered"),
+			},
+			{
+				Config: testAccAgentConfig(mock.URL, ""),
+				Check: func(*terraform.State) error {
+					if got := mock.runtimeAgentCount(); got != 1 {
+						return fmt.Errorf("control plane holds %d agent(s) after the refused destroy, want 1", got)
+					}
+					mock.tune(func(m *mockServer) { m.deleteAgentAnswer = deleteAgentNormal })
+					return nil
+				},
+			},
+		},
+	})
+}
+
+// TestAccAgentResource_deleteAlreadyGoneSucceeds guards the other half: when the
+// agent really has been removed out of band, the 404 stays a silent success and
+// the destroy must not start failing.
+func TestAccAgentResource_deleteAlreadyGoneSucceeds(t *testing.T) {
+	mock := newMockServer(t)
+	mock.tune(func(m *mockServer) { m.deleteAgentAnswer = deleteAgentAlreadyGone })
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{Config: testAccAgentConfig(mock.URL, "")},
+			{Config: testAccAgentConfig(mock.URL, ""), Destroy: true},
+		},
+	})
+}

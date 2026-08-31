@@ -94,6 +94,13 @@ type mockServer struct {
 	// archiveSettlesAfter is how many deploy-status reads the archive stays
 	// in_progress for, standing in for the scale-to-zero deploy taking a while.
 	archiveSettlesAfter int
+	// deleteAgentAnswer overrides how DELETE /agents/{id} answers; see the
+	// deleteAgentMode constants. Empty is the normal 204.
+	deleteAgentAnswer deleteAgentMode
+	// deletedAgs are the self-hosted agents a delete removed. Without it an unknown
+	// id falls through to the synthesized hosted-runtime record below and reads 200
+	// forever, so a deleted agent would still look alive.
+	deletedAgs map[string]bool
 	// revokedTokens records the agents whose worker token the delete revoked. The
 	// real API only revokes on the decommission path, which a delete issued while
 	// the archive deploy is still in flight never reaches.
@@ -171,6 +178,7 @@ func newMockServer(t *testing.T) *mockServer {
 		hostedAgs:     map[string]map[string]any{},
 		outposts:      map[string]map[string]any{},
 		revokedTokens: map[string]bool{},
+		deletedAgs:    map[string]bool{},
 		selfHostedAgs: map[string]map[string]any{},
 	}
 	for _, res := range crudRegistry {
@@ -1280,6 +1288,10 @@ func (m *mockServer) runtimeAgentByID(w http.ResponseWriter, agentID string) {
 		writeJSON(w, http.StatusOK, rec)
 		return
 	}
+	if m.deletedAgs[agentID] {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "agent not found"})
+		return
+	}
 	rec := map[string]any{"agent_id": agentID, "status": "draft", "deploy_status": m.deployStatusFor(agentID)}
 	if m.deployFails {
 		rec["status"] = "deploy_failed"
@@ -1405,10 +1417,45 @@ func (m *mockServer) archiveRuntimeAgent(w http.ResponseWriter, agentID string) 
 	writeJSON(w, http.StatusOK, map[string]any{"agent_id": agentID, "status": "archived"})
 }
 
+// deleteAgentMode selects how the mock answers DELETE /api/v1/agents/{id}. The
+// real route is gated on the self_hosted_agent_lifecycle flag and 404s while the
+// flag is off, which is indistinguishable by status alone from the agent being
+// gone. 404 and not a 5xx throughout, because the client retries 5xx away.
+type deleteAgentMode string
+
+const (
+	// deleteAgentNormal is the default: 204, and the record is removed.
+	deleteAgentNormal deleteAgentMode = ""
+	// deleteAgentLifecycleOff is the feature gate shut — 404 carrying the control
+	// plane's detail string, and the agent survives.
+	deleteAgentLifecycleOff deleteAgentMode = "lifecycle_off"
+	// deleteAgentOpaque404 is a 404 whose body says nothing useful while the agent
+	// survives, so only a follow-up read can tell it from "already gone".
+	deleteAgentOpaque404 deleteAgentMode = "opaque_404"
+	// deleteAgentAlreadyGone is the genuine race: the record is gone and the delete
+	// 404s, which a destroy must keep accepting silently.
+	deleteAgentAlreadyGone deleteAgentMode = "already_gone"
+)
+
 func (m *mockServer) deleteRuntimeAgent(w http.ResponseWriter, agentID string) {
+	switch m.deleteAgentAnswer {
+	case deleteAgentLifecycleOff:
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "self-hosted agent lifecycle is not enabled for this account"})
+		return
+	case deleteAgentOpaque404:
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "Not Found"})
+		return
+	}
 	if rec, ok := m.selfHostedAgs[agentID]; ok {
 		delete(m.selfHostedAgs, toString(rec["id_slug"]))
 		delete(m.selfHostedAgs, toString(rec["agent_id"]))
+		m.deletedAgs[toString(rec["id_slug"])] = true
+		m.deletedAgs[toString(rec["agent_id"])] = true
+	}
+	m.deletedAgs[agentID] = true
+	if m.deleteAgentAnswer == deleteAgentAlreadyGone {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "agent not found"})
+		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

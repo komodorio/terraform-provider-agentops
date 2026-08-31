@@ -4,9 +4,12 @@
 package provider
 
 import (
+	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
 // TestAccSelfHostedCatalogDeploymentResource covers deploy (create), read-back and
@@ -123,6 +126,40 @@ func TestAccSelfHostedCatalogDeploymentResource_readFailureKeepsToken(t *testing
 					resource.TestCheckNoResourceAttr("agentops_self_hosted_catalog_deployment.test", "status"),
 					resource.TestCheckNoResourceAttr("agentops_self_hosted_catalog_deployment.test", "name"),
 				),
+			},
+		},
+	})
+}
+
+// TestAccSelfHostedCatalogDeploymentResource_deleteGatedByLifecycleFlag covers the
+// second caller of archiveAndDeleteAgent: a gated 404 from DELETE /agents/{id}
+// must fail this resource's destroy too, not silently orphan the deployed agent.
+func TestAccSelfHostedCatalogDeploymentResource_deleteGatedByLifecycleFlag(t *testing.T) {
+	mock := newMockServer(t)
+	mock.tune(func(m *mockServer) { m.deleteAgentAnswer = deleteAgentLifecycleOff })
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccSelfHostedCatalogDeploymentConfig(mock.URL),
+				Check:  resource.TestCheckResourceAttr("agentops_self_hosted_catalog_deployment.test", "agent_id", "prod-ddog-self"),
+			},
+			{
+				Config:      testAccSelfHostedCatalogDeploymentConfig(mock.URL),
+				Destroy:     true,
+				ExpectError: regexp.MustCompile("self_hosted_agent_lifecycle"),
+			},
+			{
+				Config: testAccSelfHostedCatalogDeploymentConfig(mock.URL),
+				Check: func(*terraform.State) error {
+					if got := mock.runtimeAgentCount(); got != 1 {
+						return fmt.Errorf("control plane holds %d agent(s) after the refused destroy, want 1", got)
+					}
+					mock.tune(func(m *mockServer) { m.deleteAgentAnswer = deleteAgentNormal })
+					return nil
+				},
 			},
 		},
 	})

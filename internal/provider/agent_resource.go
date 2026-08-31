@@ -310,6 +310,10 @@ func archiveAndDeleteAgent(ctx context.Context, cl *client.Client, agentID strin
 	}
 	if delErr := client.Check(delResp.HTTPResponse, delResp.Body); delErr != nil {
 		if client.IsNotFound(delErr) {
+			if cause := agentDeleteRefusedCause(ctx, cl, agentID, string(delResp.Body)); cause != "" {
+				diags.AddError(agentDeleteGatedSummary, agentDeleteGatedDetail(agentID, cause, string(delResp.Body)))
+				return
+			}
 			return
 		}
 		if client.IsConflict(delErr) && strings.Contains(delErr.Error(), "online workers") {
@@ -319,6 +323,60 @@ func archiveAndDeleteAgent(ctx context.Context, cl *client.Client, agentID strin
 		}
 		diags.AddError("Error deleting agent", delErr.Error())
 	}
+}
+
+const agentDeleteGatedSummary = "Agent was not deleted — DELETE returned 404 but the agent still exists"
+
+// lifecycleGateHints match the control-plane 404 raised when DELETE /agents/{id}
+// is refused because the self_hosted_agent_lifecycle flag is off for the account.
+// Matched as lowercased substrings rather than on the exact sentence: the detail
+// text is not part of the API contract, so an exact match would silently degrade
+// into the orphaning behaviour the moment the wording is reworded.
+var lifecycleGateHints = []string{"lifecycle is not enabled", "self-hosted agent lifecycle", "lifecycle is disabled"}
+
+// agentDeleteRefusedCause reports why a 404 from DELETE /agents/{id} is a refusal
+// rather than "already gone", or "" when the agent really is gone. The delete route
+// is feature-gated and answers 404 when the gate is shut, so taking every 404 as
+// success drops a live agent — still registered, still holding a worker token — out
+// of Terraform state. The read path is never gated, so a follow-up GET is the
+// authoritative discriminator; the body match is the fallback for when that GET
+// cannot be completed.
+func agentDeleteRefusedCause(ctx context.Context, cl *client.Client, agentID, body string) string {
+	lower := strings.ToLower(body)
+	for _, hint := range lifecycleGateHints {
+		if strings.Contains(lower, hint) {
+			return "The control plane reported that the self-hosted agent lifecycle feature is not enabled for this account."
+		}
+	}
+	if agentExists(ctx, cl, agentID) {
+		return "The delete returned 404, but a follow-up read shows the agent is still registered."
+	}
+	return ""
+}
+
+// agentExists reports whether GET /agents/{id} still serves the record. Only a
+// clean 2xx counts: an unreachable or refused read is not evidence either way, and
+// must not be turned into a destroy failure.
+func agentExists(ctx context.Context, cl *client.Client, agentID string) bool {
+	apiResp, err := cl.Gen.AgentsGetAgentWithResponse(ctx, agentID)
+	if err != nil {
+		return false
+	}
+	return client.Check(apiResp.HTTPResponse, apiResp.Body) == nil
+}
+
+func agentDeleteGatedDetail(agentID, cause, body string) string {
+	return fmt.Sprintf("%s\n\n"+
+		"Agent %[2]s was archived but NOT deleted: it is still registered in AgentOps and its worker token is still live.\n\n"+
+		"Terraform has kept the resource in state, so nothing is orphaned yet — but do not remove it from state and re-apply "+
+		"with the same agent id: that adopts the surviving agent and rotates its worker token, invalidating the Kubernetes "+
+		"secret already deployed in your cluster.\n\n"+
+		"To recover:\n"+
+		"  1. Have the self_hosted_agent_lifecycle feature enabled for your AgentOps account (Komodor support or your account "+
+		"admin), then re-run 'terraform destroy'.\n"+
+		"  2. Or delete agent %[2]s by hand in AgentOps, then re-run 'terraform destroy' — the destroy then succeeds because "+
+		"the agent really is gone.\n\n"+
+		"API response: %[3]s", cause, agentID, body)
 }
 
 func (r *agentResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
