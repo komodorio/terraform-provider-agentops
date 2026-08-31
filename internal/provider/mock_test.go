@@ -61,6 +61,12 @@ type mockServer struct {
 	channels    map[string]map[string]any            // channels
 	chanRoutes  map[string]map[string]map[string]any // channel_id -> route_id -> route
 	hostedAgs   map[string]map[string]any            // "customer/agent_id" -> hosted agent
+	// selfHostedAgs are the agents a self-hosted catalog deploy registers, keyed by
+	// agent id. They live under /api/v1/agents, not /api/v1/hosted-agents.
+	selfHostedAgs map[string]map[string]any
+	// selfHostedTriggerFails makes the self-hosted deploy answer 207 with one failed
+	// trigger, the partial success the resource must keep rather than roll back.
+	selfHostedTriggerFails bool
 	// deployFails makes every hosted agent this server creates behave like a failed
 	// cluster-side provision: the hosted record stays "draft" (that record's status
 	// only ever tracks heartbeats) while the runtime agent record reports the failure.
@@ -116,6 +122,9 @@ var (
 	runtimeAgentByIDRe    = regexp.MustCompile(`^/api/v1/agents/([^/]+)$`)
 	hostedAgentArchiveRe  = regexp.MustCompile(`^/api/v1/hosted-agents/([^/]+)/([^/]+)/archive$`)
 	workerCatalogDeployRe = regexp.MustCompile(`^/api/v1/worker-catalog/([^/]+)/deploy$`)
+
+	runtimeAgentArchiveRe         = regexp.MustCompile(`^/api/v1/agents/([^/]+)/archive$`)
+	workerCatalogSelfHostedDeploy = regexp.MustCompile(`^/api/v1/worker-catalog/([^/]+)/self-hosted-deploy$`)
 )
 
 // tune applies mock configuration under the lock every handler reads it with, so a
@@ -145,6 +154,7 @@ func newMockServer(t *testing.T) *mockServer {
 		chanRoutes:    map[string]map[string]map[string]any{},
 		hostedAgs:     map[string]map[string]any{},
 		revokedTokens: map[string]bool{},
+		selfHostedAgs: map[string]map[string]any{},
 	}
 	for _, res := range crudRegistry {
 		m.stores[res.collection] = map[string]map[string]any{}
@@ -273,11 +283,18 @@ func (m *mockServer) handle(w http.ResponseWriter, r *http.Request) {
 	case hostedAgentByPathRe.MatchString(r.URL.Path):
 		mm := hostedAgentByPathRe.FindStringSubmatch(r.URL.Path)
 		m.hostedAgentByPath(w, r, mm[1], mm[2])
+	case runtimeAgentArchiveRe.MatchString(r.URL.Path) && r.Method == http.MethodPost:
+		m.archiveRuntimeAgent(w, runtimeAgentArchiveRe.FindStringSubmatch(r.URL.Path)[1])
 	case runtimeAgentByIDRe.MatchString(r.URL.Path) && r.Method == http.MethodGet:
 		m.runtimeAgentByID(w, runtimeAgentByIDRe.FindStringSubmatch(r.URL.Path)[1])
+	case runtimeAgentByIDRe.MatchString(r.URL.Path) && r.Method == http.MethodDelete:
+		m.deleteRuntimeAgent(w, runtimeAgentByIDRe.FindStringSubmatch(r.URL.Path)[1])
 	case workerCatalogDeployRe.MatchString(r.URL.Path) && r.Method == http.MethodPost:
 		mm := workerCatalogDeployRe.FindStringSubmatch(r.URL.Path)
 		m.deployWorkerCatalog(w, r, mm[1])
+	case workerCatalogSelfHostedDeploy.MatchString(r.URL.Path) && r.Method == http.MethodPost:
+		mm := workerCatalogSelfHostedDeploy.FindStringSubmatch(r.URL.Path)
+		m.selfHostedDeployWorkerCatalog(w, r, mm[1])
 
 	default:
 		if m.dispatchCRUD(w, r) {
@@ -1103,6 +1120,10 @@ func (m *mockServer) runtimeAgentByID(w http.ResponseWriter, agentID string) {
 		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "agent not found"})
 		return
 	}
+	if rec, ok := m.selfHostedAgs[agentID]; ok {
+		writeJSON(w, http.StatusOK, rec)
+		return
+	}
 	rec := map[string]any{"agent_id": agentID, "status": "draft", "deploy_status": m.deployStatusFor(agentID)}
 	if m.deployFails {
 		rec["status"] = "deploy_failed"
@@ -1172,6 +1193,68 @@ func (m *mockServer) deployWorkerCatalog(w http.ResponseWriter, r *http.Request,
 	}
 	m.hostedAgs[customer+"/"+agentID] = rec
 	writeJSON(w, http.StatusCreated, rec)
+}
+
+// selfHostedDeployWorkerCatalog mints a worker token for a catalog entry the
+// operator will run themselves. With selfHostedTriggerFails set it answers 207,
+// the partial success the real endpoint returns when the agent was created but a
+// requested trigger was not.
+func (m *mockServer) selfHostedDeployWorkerCatalog(w http.ResponseWriter, r *http.Request, catalogID string) {
+	body := decode(r)
+	// The friendly slug defaults to the catalog entry's own id, and the response
+	// carries only the opaque id — never the slug. Both address the agent.
+	slug := toString(body["agentId"])
+	if slug == "" {
+		slug = catalogID
+	}
+	opaqueID := m.nextID("ag")
+	agent := map[string]any{
+		"agent_id": opaqueID, "id_slug": slug, "status": "draft", "name": slug, "created_at": mockTS,
+	}
+	m.selfHostedAgs[opaqueID] = agent
+	m.selfHostedAgs[slug] = agent
+
+	rec := map[string]any{
+		"agentId":         opaqueID,
+		"token":           "wt_" + slug + "_secret",
+		"workerTokenHint": "wt_" + firstN(slug, 4) + "...",
+	}
+	if m.selfHostedTriggerFails {
+		rec["triggers"] = []any{map[string]any{
+			"name":   "nightly",
+			"status": "failed",
+			"type":   "schedule",
+			"error":  "cron rejected",
+			"retry":  "POST /api/v1/agents/" + opaqueID + "/triggers",
+		}}
+		writeJSON(w, http.StatusMultiStatus, rec)
+		return
+	}
+	writeJSON(w, http.StatusCreated, rec)
+}
+
+func firstN(s string, n int) string {
+	if len(s) < n {
+		return s
+	}
+	return s[:n]
+}
+
+func (m *mockServer) archiveRuntimeAgent(w http.ResponseWriter, agentID string) {
+	if rec, ok := m.selfHostedAgs[agentID]; ok {
+		rec["is_archived"] = true
+		rec["status"] = "archived"
+		rec["instances_total"] = 0
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"agent_id": agentID, "status": "archived"})
+}
+
+func (m *mockServer) deleteRuntimeAgent(w http.ResponseWriter, agentID string) {
+	if rec, ok := m.selfHostedAgs[agentID]; ok {
+		delete(m.selfHostedAgs, toString(rec["id_slug"]))
+		delete(m.selfHostedAgs, toString(rec["agent_id"]))
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (m *mockServer) hostedAgentByPath(w http.ResponseWriter, r *http.Request, customer, agentID string) {

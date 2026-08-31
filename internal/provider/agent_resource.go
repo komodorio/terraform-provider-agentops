@@ -279,29 +279,33 @@ func (r *agentResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 		return
 	}
 
-	agentID := state.AgentID.ValueString()
+	archiveAndDeleteAgent(ctx, r.client, state.AgentID.ValueString(), &resp.Diagnostics)
+}
 
-	archiveResp, err := r.client.Gen.AgentsArchiveAgentWithResponse(ctx, agentID)
+// archiveAndDeleteAgent archives an agent, waits for the archive to settle, then
+// deletes it. Shared by every resource that owns a self-hosted agent record.
+func archiveAndDeleteAgent(ctx context.Context, cl *client.Client, agentID string, diags *diag.Diagnostics) {
+	archiveResp, err := cl.Gen.AgentsArchiveAgentWithResponse(ctx, agentID)
 	if err != nil {
-		resp.Diagnostics.AddError("Error archiving agent before delete", err.Error())
+		diags.AddError("Error archiving agent before delete", err.Error())
 		return
 	}
 	if archiveErr := client.Check(archiveResp.HTTPResponse, archiveResp.Body); archiveErr != nil {
 		if !client.IsNotFound(archiveErr) && !client.IsConflict(archiveErr) {
-			resp.Diagnostics.AddError("Error archiving agent before delete", archiveErr.Error())
+			diags.AddError("Error archiving agent before delete", archiveErr.Error())
 			return
 		}
 	}
 
 	// Wait briefly for the archive to settle before deleting — the API may
 	// reject a delete while workers are still heartbeating.
-	if err := r.awaitDeletable(ctx, agentID); err != nil {
-		resp.Diagnostics.AddWarning("Agent may not be fully archived", err.Error())
+	if err := awaitAgentDeletable(ctx, cl, agentID); err != nil {
+		diags.AddWarning("Agent may not be fully archived", err.Error())
 	}
 
-	delResp, err := r.client.Gen.AgentsDeleteAgentWithResponse(ctx, agentID)
+	delResp, err := cl.Gen.AgentsDeleteAgentWithResponse(ctx, agentID)
 	if err != nil {
-		resp.Diagnostics.AddError("Error deleting agent", err.Error())
+		diags.AddError("Error deleting agent", err.Error())
 		return
 	}
 	if delErr := client.Check(delResp.HTTPResponse, delResp.Body); delErr != nil {
@@ -309,11 +313,11 @@ func (r *agentResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 			return
 		}
 		if client.IsConflict(delErr) && strings.Contains(delErr.Error(), "online workers") {
-			resp.Diagnostics.AddError("Error deleting agent",
+			diags.AddError("Error deleting agent",
 				fmt.Sprintf("Agent %s still has online workers. Kill the worker pods and wait ~60s for the heartbeat to expire, then run destroy again.", agentID))
 			return
 		}
-		resp.Diagnostics.AddError("Error deleting agent", delErr.Error())
+		diags.AddError("Error deleting agent", delErr.Error())
 	}
 }
 
@@ -353,10 +357,10 @@ func agentApplyInstance(m *agentResourceModel, inst *gen.AgentInstanceResponse) 
 
 const agentDeleteWaitTimeout = 90 * time.Second
 
-func (r *agentResource) awaitDeletable(ctx context.Context, agentID string) error {
+func awaitAgentDeletable(ctx context.Context, cl *client.Client, agentID string) error {
 	deadline := time.Now().Add(agentDeleteWaitTimeout)
 	for {
-		if agentReadyToDelete(r.client, ctx, agentID) {
+		if agentReadyToDelete(cl, ctx, agentID) {
 			return nil
 		}
 		if !time.Now().Before(deadline) {

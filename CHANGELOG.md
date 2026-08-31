@@ -2,6 +2,7 @@
 
 FEATURES:
 
+* **New Resource:** `agentops_self_hosted_catalog_deployment` — deploys a curated worker catalog entry into your own cluster via `POST /api/v1/worker-catalog/{catalog_id}/self-hosted-deploy`, exposing the once-only worker `token` (sensitive) and its `worker_token_hint`. Sibling to `agentops_worker_catalog_deployment`, which hosts the worker for you and exposes `repo_*` instead. Requires a user-bound API key (a PAT); a service-account token is rejected.
 * resource/agentops_hosted_agent: Add `agents` attribute for delivering Claude Code subagents (`.claude/agents/*.md`) to a hosted agent, mirroring `skills`.
 
 BUG FIXES:
