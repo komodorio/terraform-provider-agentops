@@ -144,6 +144,11 @@ type mockServer struct {
 	// real API only revokes on the decommission path, which a delete issued while
 	// the archive deploy is still in flight never reaches.
 	revokedTokens map[string]bool
+	// skills are authored skills keyed by skill id. skillBindings are the
+	// agent<->skill attachments keyed skill id -> agent id, surfaced back through
+	// the skill detail's used_by list the binding resource reads.
+	skills        map[string]map[string]any
+	skillBindings map[string]map[string]map[string]any
 	seq           int
 }
 
@@ -192,6 +197,12 @@ var (
 
 	runtimeAgentArchiveRe         = regexp.MustCompile(`^/api/v1/agents/([^/]+)/archive$`)
 	workerCatalogSelfHostedDeploy = regexp.MustCompile(`^/api/v1/worker-catalog/([^/]+)/self-hosted-deploy$`)
+
+	skillVersionsRe = regexp.MustCompile(`^/api/v1/skills/([^/]+)/versions$`)
+	skillClaimRe    = regexp.MustCompile(`^/api/v1/skills/([^/]+)/claim$`)
+	skillIDRe       = regexp.MustCompile(`^/api/v1/skills/([^/]+)$`)
+	agentSkillsRe   = regexp.MustCompile(`^/api/v1/agents/([^/]+)/skills$`)
+	agentSkillRe    = regexp.MustCompile(`^/api/v1/agents/([^/]+)/skills/([^/]+)$`)
 )
 
 // tune applies mock configuration under the lock every handler reads it with, so a
@@ -226,6 +237,8 @@ func newMockServer(t *testing.T) *mockServer {
 		deletedAgs:     map[string]bool{},
 		heartbeatedAgs: map[string]bool{},
 		selfHostedAgs:  map[string]map[string]any{},
+		skills:         map[string]map[string]any{},
+		skillBindings:  map[string]map[string]map[string]any{},
 	}
 	for _, res := range crudRegistry {
 		m.stores[res.collection] = map[string]map[string]any{}
@@ -306,7 +319,20 @@ func (m *mockServer) handle(w http.ResponseWriter, r *http.Request) {
 	case r.URL.Path == "/api/v1/worker-catalog" && r.Method == http.MethodGet:
 		writeJSON(w, http.StatusOK, []map[string]any{{"id": "wc_1", "name": "datadog-investigator", "description": "d", "category": "observability", "status": "available", "ready": true}})
 	case r.URL.Path == "/api/v1/skills" && r.Method == http.MethodGet:
-		writeJSON(w, http.StatusOK, []map[string]any{{"skill_id": "sk_1", "name": "search", "description": "d", "md5": "abc", "updated_at": mockTS, "tags": []any{"core"}}})
+		m.listSkills(w)
+	case r.URL.Path == "/api/v1/skills" && r.Method == http.MethodPost:
+		m.createSkill(w, r)
+	case skillVersionsRe.MatchString(r.URL.Path) && r.Method == http.MethodPost:
+		m.publishSkillVersion(w, r, skillVersionsRe.FindStringSubmatch(r.URL.Path)[1])
+	case skillClaimRe.MatchString(r.URL.Path) && r.Method == http.MethodPost:
+		m.claimSkill(w, skillClaimRe.FindStringSubmatch(r.URL.Path)[1])
+	case skillIDRe.MatchString(r.URL.Path):
+		m.skillByID(w, r, skillIDRe.FindStringSubmatch(r.URL.Path)[1])
+	case agentSkillsRe.MatchString(r.URL.Path) && r.Method == http.MethodPost:
+		m.attachSkill(w, r, agentSkillsRe.FindStringSubmatch(r.URL.Path)[1])
+	case agentSkillRe.MatchString(r.URL.Path):
+		mm := agentSkillRe.FindStringSubmatch(r.URL.Path)
+		m.agentSkillByID(w, r, mm[1], mm[2])
 	case r.URL.Path == "/api/v1/reviewers" && r.Method == http.MethodGet:
 		writeJSON(w, http.StatusOK, []map[string]any{{"agent_id": "agent_rev_1", "name": "security-reviewer", "description": "d", "is_builtin": true, "workflow_count": 0, "reviews_30d": 0, "findings_30d": 0}})
 
@@ -559,6 +585,152 @@ func (m *mockServer) kbAgentDelete(w http.ResponseWriter, kbID, agentID string) 
 		delete(m.kbAgents[kbID], agentID)
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// skillDetail builds the SkillDetail-shaped record for a stored authored skill,
+// hydrating used_by from the current bindings the way the real route does.
+func (m *mockServer) skillDetail(id string) map[string]any {
+	rec := cloneMap(m.skills[id])
+	usedBy := make([]map[string]any, 0)
+	for _, b := range m.skillBindings[id] {
+		usedBy = append(usedBy, map[string]any{
+			"agent_id":          b["agent_id"],
+			"binding_id":        b["id"],
+			"pinned_version_id": b["pinned_version_id"],
+		})
+	}
+	rec["used_by"] = usedBy
+	return rec
+}
+
+func (m *mockServer) createSkill(w http.ResponseWriter, r *http.Request) {
+	body := decode(r)
+	id := m.nextID("skl")
+	rec := map[string]any{
+		"skill_id":        id,
+		"name":            body["name"],
+		"description":     strOr(body["description"], ""),
+		"content":         strOr(body["content"], ""),
+		"tags":            sliceOrEmpty(body["tags"]),
+		"labels":          mapOrEmpty(body["labels"]),
+		"kind":            "authored",
+		"md5":             "",
+		"path":            nil,
+		"updated_at":      mockTS,
+		"references":      []any{},
+		"content_version": nil,
+		"source_agents":   []any{},
+	}
+	if body["content"] != nil {
+		rec["content_version"] = 1
+	}
+	m.skills[id] = rec
+	writeJSON(w, http.StatusCreated, m.skillDetail(id))
+}
+
+func (m *mockServer) listSkills(w http.ResponseWriter) {
+	out := []map[string]any{{"skill_id": "sk_1", "name": "search", "description": "d", "md5": "abc", "updated_at": mockTS, "tags": []any{"core"}}}
+	for id := range m.skills {
+		out = append(out, m.skillDetail(id))
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (m *mockServer) skillByID(w http.ResponseWriter, r *http.Request, id string) {
+	if _, ok := m.skills[id]; !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "not found"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, m.skillDetail(id))
+	case http.MethodPatch:
+		body := decode(r)
+		for _, k := range []string{"name", "description", "tags", "labels"} {
+			if v, ok := body[k]; ok && v != nil {
+				m.skills[id][k] = v
+			}
+		}
+		m.skills[id]["updated_at"] = mockTS
+		writeJSON(w, http.StatusOK, m.skillDetail(id))
+	case http.MethodDelete:
+		delete(m.skills, id)
+		delete(m.skillBindings, id)
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{})
+	}
+}
+
+func (m *mockServer) publishSkillVersion(w http.ResponseWriter, r *http.Request, id string) {
+	skill, ok := m.skills[id]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "not found"})
+		return
+	}
+	body := decode(r)
+	next := 1
+	if cur, ok := skill["content_version"].(int); ok {
+		next = cur + 1
+	}
+	skill["content"] = strOr(body["content"], "")
+	skill["content_version"] = next
+	skill["updated_at"] = mockTS
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"id":         m.nextID("sklv"),
+		"skill_id":   id,
+		"version":    next,
+		"content":    skill["content"],
+		"references": sliceOrEmpty(body["references"]),
+		"created_at": mockTS,
+	})
+}
+
+func (m *mockServer) claimSkill(w http.ResponseWriter, id string) {
+	// Claim promotes a discovered skill to an authored one; the acceptance suite
+	// does not exercise it, so a minimal echo keeps the route from 404ing.
+	writeJSON(w, http.StatusCreated, m.skillDetail(id))
+}
+
+func (m *mockServer) attachSkill(w http.ResponseWriter, r *http.Request, agentID string) {
+	body := decode(r)
+	skillID, _ := body["skill_id"].(string)
+	rec := map[string]any{
+		"id":                m.nextID("skb"),
+		"agent_id":          agentID,
+		"skill_id":          skillID,
+		"origin":            "manual",
+		"pinned_version_id": body["pin_version_id"],
+		"created_at":        mockTS,
+	}
+	if m.skillBindings[skillID] == nil {
+		m.skillBindings[skillID] = map[string]map[string]any{}
+	}
+	m.skillBindings[skillID][agentID] = rec
+	writeJSON(w, http.StatusCreated, rec)
+}
+
+func (m *mockServer) agentSkillByID(w http.ResponseWriter, r *http.Request, agentID, skillID string) {
+	switch r.Method {
+	case http.MethodPatch:
+		if m.skillBindings[skillID] == nil || m.skillBindings[skillID][agentID] == nil {
+			writeJSON(w, http.StatusNotFound, map[string]any{"detail": "binding not found"})
+			return
+		}
+		rec := m.skillBindings[skillID][agentID]
+		body := decode(r)
+		if v, ok := body["pin_version_id"]; ok {
+			rec["pinned_version_id"] = v
+		}
+		writeJSON(w, http.StatusOK, rec)
+	case http.MethodDelete:
+		if m.skillBindings[skillID] != nil {
+			delete(m.skillBindings[skillID], agentID)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{})
+	}
 }
 
 func (m *mockServer) connectionByID(w http.ResponseWriter, r *http.Request, id string) {
@@ -1909,6 +2081,30 @@ func decode(r *http.Request) map[string]any {
 		body = map[string]any{}
 	}
 	return body
+}
+
+// strOr returns v as a string, or def when v is nil/not a string.
+func strOr(v any, def string) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return def
+}
+
+// sliceOrEmpty returns v as a slice, or an empty slice when v is nil.
+func sliceOrEmpty(v any) any {
+	if v == nil {
+		return []any{}
+	}
+	return v
+}
+
+// mapOrEmpty returns v as a map, or an empty map when v is nil.
+func mapOrEmpty(v any) any {
+	if v == nil {
+		return map[string]any{}
+	}
+	return v
 }
 
 func cloneMap(in map[string]any) map[string]any {
