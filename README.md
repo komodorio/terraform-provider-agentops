@@ -86,6 +86,8 @@ export AGENTOPS_ENDPOINT="https://staging.agentops.komodor.com" # optional
 | Resource    | `agentops_channel_route`          | Route forwarding matching channel events to a target |
 | Resource    | `agentops_hosted_agent`           | Komodor-hosted managed agent deployment           |
 | Resource    | `agentops_worker_catalog_deployment` | Deploys a curated worker from the worker catalog |
+| Resource    | `agentops_skill`                  | Authored skill in the Skills Registry (versioned) |
+| Resource    | `agentops_agent_skill`            | Attaches an authored skill to an agent            |
 | Data source | `agentops_integration_catalog`    | Integration providers available to the account    |
 | Data source | `agentops_capabilities`           | Authorization capabilities                        |
 | Data source | `agentops_resource_types`         | Authorization resource types                      |
