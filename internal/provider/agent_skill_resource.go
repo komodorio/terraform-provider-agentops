@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -39,12 +40,13 @@ type agentSkillResource struct {
 // binding and is create-only; only the pinned version can be changed in place
 // (a "repin").
 type agentSkillResourceModel struct {
-	ID           types.String `tfsdk:"id"`
-	AgentID      types.String `tfsdk:"agent_id"`
-	SkillID      types.String `tfsdk:"skill_id"`
-	PinVersionID types.String `tfsdk:"pin_version_id"`
-	Origin       types.String `tfsdk:"origin"`
-	CreatedAt    types.String `tfsdk:"created_at"`
+	ID              types.String `tfsdk:"id"`
+	AgentID         types.String `tfsdk:"agent_id"`
+	SkillID         types.String `tfsdk:"skill_id"`
+	PinVersion      types.Int64  `tfsdk:"pin_version"`
+	PinnedVersionID types.String `tfsdk:"pinned_version_id"`
+	Origin          types.String `tfsdk:"origin"`
+	CreatedAt       types.String `tfsdk:"created_at"`
 }
 
 func (r *agentSkillResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -76,12 +78,16 @@ func (r *agentSkillResource) Schema(ctx context.Context, req resource.SchemaRequ
 				Required:            true,
 				PlanModifiers:       forceNewString,
 			},
-			"pin_version_id": schema.StringAttribute{
-				MarkdownDescription: "Version ID to pin the binding to. Omit to float on the latest published " +
-					"version. Changing it repins the binding in place.",
+			"pin_version": schema.Int64Attribute{
+				MarkdownDescription: "Published version number to pin the binding to (e.g. `3`). Omit to float on " +
+					"the latest published version. Changing it repins the binding in place.",
 				Optional:      true,
 				Computed:      true,
-				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+				PlanModifiers: []planmodifier.Int64{int64planmodifier.UseStateForUnknown()},
+			},
+			"pinned_version_id": schema.StringAttribute{
+				MarkdownDescription: "Version ID the pin resolved to, or null when the binding floats on the latest version.",
+				Computed:            true,
 			},
 			"origin": schema.StringAttribute{
 				MarkdownDescription: "How the binding was created (e.g. `manual`).",
@@ -109,8 +115,8 @@ func (r *agentSkillResource) Create(ctx context.Context, req resource.CreateRequ
 	}
 
 	body := gen.AttachSkillRequest{
-		SkillId:      plan.SkillID.ValueString(),
-		PinVersionId: stringToPtr(plan.PinVersionID),
+		SkillId:    plan.SkillID.ValueString(),
+		PinVersion: int64ToIntPtr(plan.PinVersion),
 	}
 
 	apiResp, err := r.client.Gen.SkillsAttachSkillRouteWithResponse(ctx, plan.AgentID.ValueString(), body)
@@ -171,7 +177,8 @@ func (r *agentSkillResource) Read(ctx context.Context, req resource.ReadRequest,
 	}
 
 	state.ID = types.StringValue(found.BindingId)
-	state.PinVersionID = ptrToString(found.PinnedVersionId)
+	state.PinVersion = intPtrToInt64(found.Version)
+	state.PinnedVersionID = ptrToString(found.PinnedVersionId)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -183,7 +190,7 @@ func (r *agentSkillResource) Update(ctx context.Context, req resource.UpdateRequ
 	}
 
 	body := gen.RepinSkillRequest{
-		PinVersionId: stringToPtr(plan.PinVersionID),
+		PinVersion: int64ToIntPtr(plan.PinVersion),
 	}
 
 	apiResp, err := r.client.Gen.SkillsRepinSkillRouteWithResponse(ctx, plan.AgentID.ValueString(), plan.SkillID.ValueString(), body)
@@ -234,12 +241,21 @@ func (r *agentSkillResource) ImportState(ctx context.Context, req resource.Impor
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("skill_id"), parts[1])...)
 }
 
-// agentSkillApplyBinding writes an AgentSkillBindingResponse into the model.
+// agentSkillApplyBinding writes an AgentSkillBindingResponse into the model. The
+// response reports the resolved pinned_version_id but not the version number, so
+// pin_version is left to the caller (kept from the plan on write, read from the
+// skill's used_by list on refresh).
 func agentSkillApplyBinding(m *agentSkillResourceModel, b *gen.AgentSkillBindingResponse) {
 	m.ID = types.StringValue(b.Id)
 	m.AgentID = types.StringValue(b.AgentId)
 	m.SkillID = types.StringValue(b.SkillId)
-	m.PinVersionID = ptrToString(b.PinnedVersionId)
+	m.PinnedVersionID = ptrToString(b.PinnedVersionId)
 	m.Origin = types.StringValue(b.Origin)
 	m.CreatedAt = types.StringValue(b.CreatedAt)
+
+	// A binding created or repinned with no pin floats on the latest version:
+	// normalise the unknown planned value to null so it can be written to state.
+	if m.PinVersion.IsUnknown() {
+		m.PinVersion = types.Int64Null()
+	}
 }

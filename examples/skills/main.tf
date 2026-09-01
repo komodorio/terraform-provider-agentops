@@ -39,9 +39,10 @@ resource "agentops_skill" "deploy_runbook" {
 }
 
 # ── Binding: attach the skill to an agent ────────────────────────────────────
-# `pin_version_id` is omitted, so the binding floats on the latest published
+# `pin_version` is omitted, so the binding floats on the latest published
 # version: every new version published above is picked up automatically. Set it
-# to a specific version id to freeze the agent on one version instead.
+# to a published version number (e.g. `pin_version = 1`) to freeze the agent on
+# that version instead; the resolved version id is exposed as `pinned_version_id`.
 resource "agentops_agent_skill" "runbook_to_agent" {
   agent_id = var.agent_id
   skill_id = agentops_skill.deploy_runbook.id

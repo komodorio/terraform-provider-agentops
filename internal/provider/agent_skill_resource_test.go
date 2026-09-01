@@ -39,9 +39,13 @@ func TestAccAgentSkillResource(t *testing.T) {
 				},
 			},
 			{
-				// Setting a pin repins the binding in place.
-				Config: testAccAgentSkillConfig(mock.URL, "sklv_pinned"),
-				Check:  resource.TestCheckResourceAttr("agentops_agent_skill.test", "pin_version_id", "sklv_pinned"),
+				// Pinning to a published version number repins the binding in place;
+				// the control plane resolves it to a version id.
+				Config: testAccAgentSkillConfig(mock.URL, "1"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("agentops_agent_skill.test", "pin_version", "1"),
+					resource.TestCheckResourceAttr("agentops_agent_skill.test", "pinned_version_id", "sklv_v1"),
+				),
 			},
 		},
 	})
@@ -50,7 +54,7 @@ func TestAccAgentSkillResource(t *testing.T) {
 func testAccAgentSkillConfig(endpoint, pin string) string {
 	pinLine := ""
 	if pin != "" {
-		pinLine = fmt.Sprintf("\n  pin_version_id = %q", pin)
+		pinLine = fmt.Sprintf("\n  pin_version = %s", pin)
 	}
 	return mockProviderConfig(endpoint) + fmt.Sprintf(`
 resource "agentops_skill" "test" {

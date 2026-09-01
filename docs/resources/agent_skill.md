@@ -13,11 +13,12 @@ Attaches an authored skill to an agent. Changing the agent or skill forces a new
 ## Example Usage
 
 ```terraform
-# Attach an authored skill to an agent. Omit pin_version_id to float on the
-# latest published version.
+# Attach an authored skill to an agent. Omit pin_version to float on the latest
+# published version, or set it to a published version number to pin the agent.
 resource "agentops_agent_skill" "runbook_to_agent" {
-  agent_id = "agent_01hxyz"
-  skill_id = agentops_skill.deploy_runbook.id
+  agent_id    = "agent_01hxyz"
+  skill_id    = agentops_skill.deploy_runbook.id
+  pin_version = 3 # optional; omit to always follow the latest version
 }
 ```
 
@@ -31,13 +32,14 @@ resource "agentops_agent_skill" "runbook_to_agent" {
 
 ### Optional
 
-- `pin_version_id` (String) Version ID to pin the binding to. Omit to float on the latest published version. Changing it repins the binding in place.
+- `pin_version` (Number) Published version number to pin the binding to (e.g. `3`). Omit to float on the latest published version. Changing it repins the binding in place.
 
 ### Read-Only
 
 - `created_at` (String) Creation timestamp.
 - `id` (String) Binding identifier.
 - `origin` (String) How the binding was created (e.g. `manual`).
+- `pinned_version_id` (String) Version ID the pin resolved to, or null when the binding floats on the latest version.
 
 ## Import
 

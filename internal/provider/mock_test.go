@@ -597,6 +597,7 @@ func (m *mockServer) skillDetail(id string) map[string]any {
 			"agent_id":          b["agent_id"],
 			"binding_id":        b["id"],
 			"pinned_version_id": b["pinned_version_id"],
+			"version":           b["pin_version"],
 		})
 	}
 	rec["used_by"] = usedBy
@@ -692,22 +693,55 @@ func (m *mockServer) claimSkill(w http.ResponseWriter, id string) {
 	writeJSON(w, http.StatusCreated, m.skillDetail(id))
 }
 
+// resolveSkillPin mirrors the control plane's _resolve_pin: pin_version and
+// pin_version_id are mutually exclusive, and a version number resolves to a
+// (synthetic, here) version id. Returns whether both were set (a 422).
+func resolveSkillPin(body map[string]any) (pinVersion any, pinnedVersionID any, conflict bool) {
+	pv, pvID := body["pin_version"], body["pin_version_id"]
+	if pv != nil && pvID != nil {
+		return nil, nil, true
+	}
+	if pv != nil {
+		return pv, fmt.Sprintf("sklv_v%v", pv), false
+	}
+	return nil, pvID, false
+}
+
 func (m *mockServer) attachSkill(w http.ResponseWriter, r *http.Request, agentID string) {
 	body := decode(r)
 	skillID, _ := body["skill_id"].(string)
+	pinVersion, pinnedVersionID, conflict := resolveSkillPin(body)
+	if conflict {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"detail": "specify pin_version or pin_version_id, not both"})
+		return
+	}
 	rec := map[string]any{
 		"id":                m.nextID("skb"),
 		"agent_id":          agentID,
 		"skill_id":          skillID,
 		"origin":            "manual",
-		"pinned_version_id": body["pin_version_id"],
+		"pin_version":       pinVersion,
+		"pinned_version_id": pinnedVersionID,
 		"created_at":        mockTS,
 	}
 	if m.skillBindings[skillID] == nil {
 		m.skillBindings[skillID] = map[string]map[string]any{}
 	}
 	m.skillBindings[skillID][agentID] = rec
-	writeJSON(w, http.StatusCreated, rec)
+	writeJSON(w, http.StatusCreated, bindingResponse(rec))
+}
+
+// bindingResponse projects a stored binding to the AgentSkillBindingResponse
+// shape, which carries pinned_version_id but not the version number.
+func bindingResponse(rec map[string]any) map[string]any {
+	return map[string]any{
+		"id":                rec["id"],
+		"agent_id":          rec["agent_id"],
+		"skill_id":          rec["skill_id"],
+		"origin":            rec["origin"],
+		"pinned_version_id": rec["pinned_version_id"],
+		"created_at":        rec["created_at"],
+	}
 }
 
 func (m *mockServer) agentSkillByID(w http.ResponseWriter, r *http.Request, agentID, skillID string) {
@@ -719,10 +753,20 @@ func (m *mockServer) agentSkillByID(w http.ResponseWriter, r *http.Request, agen
 		}
 		rec := m.skillBindings[skillID][agentID]
 		body := decode(r)
-		if v, ok := body["pin_version_id"]; ok {
-			rec["pinned_version_id"] = v
+		pinVersion, pinnedVersionID, conflict := resolveSkillPin(body)
+		if conflict {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"detail": "specify pin_version or pin_version_id, not both"})
+			return
 		}
-		writeJSON(w, http.StatusOK, rec)
+		// A repin with neither field omits both keys; leave the pin unchanged then.
+		if _, ok := body["pin_version"]; ok {
+			rec["pin_version"] = pinVersion
+			rec["pinned_version_id"] = pinnedVersionID
+		} else if _, ok := body["pin_version_id"]; ok {
+			rec["pin_version"] = pinVersion
+			rec["pinned_version_id"] = pinnedVersionID
+		}
+		writeJSON(w, http.StatusOK, bindingResponse(rec))
 	case http.MethodDelete:
 		if m.skillBindings[skillID] != nil {
 			delete(m.skillBindings[skillID], agentID)

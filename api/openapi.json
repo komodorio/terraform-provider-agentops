@@ -3173,6 +3173,17 @@
       },
       "AttachSkillRequest": {
         "properties": {
+          "pin_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pin Version"
+          },
           "pin_version_id": {
             "anyOf": [
               {
@@ -25224,6 +25235,17 @@
       },
       "RepinSkillRequest": {
         "properties": {
+          "pin_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pin Version"
+          },
           "pin_version_id": {
             "anyOf": [
               {

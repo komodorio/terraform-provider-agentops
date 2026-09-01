@@ -5585,6 +5585,7 @@ type AttachBaseUrlRequest struct {
 
 // AttachSkillRequest defines model for AttachSkillRequest.
 type AttachSkillRequest struct {
+	PinVersion   *int    `json:"pin_version,omitempty"`
 	PinVersionId *string `json:"pin_version_id,omitempty"`
 	SkillId      string  `json:"skill_id"`
 }
@@ -11361,6 +11362,7 @@ type RegressionAlertResponse struct {
 
 // RepinSkillRequest defines model for RepinSkillRequest.
 type RepinSkillRequest struct {
+	PinVersion   *int    `json:"pin_version,omitempty"`
 	PinVersionId *string `json:"pin_version_id,omitempty"`
 }
 

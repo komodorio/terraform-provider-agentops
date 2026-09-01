@@ -44,9 +44,11 @@ do **not** create a new version — only a change to `content` does. If the body
 YAML front-matter carries a `description`, the control plane derives the skill's
 `description` from it.
 
-Because the binding omits `pin_version_id`, the agent floats on the latest
-version and picks up each new one automatically. To freeze an agent on a specific
-version, set `pin_version_id` on `agentops_agent_skill` to that version's id.
+Because the binding omits `pin_version`, the agent floats on the latest version
+and picks up each new one automatically. To freeze an agent on a specific
+version, set `pin_version` on `agentops_agent_skill` to that published version
+number (e.g. `pin_version = 1`); the control plane resolves it to a version id,
+surfaced read-only as `pinned_version_id`.
 
 Set `-var endpoint=https://staging.agentops.komodor.com` (or `AGENTOPS_ENDPOINT`)
 to target staging or a self-hosted deployment.
