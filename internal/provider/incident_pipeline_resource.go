@@ -5,6 +5,7 @@ package provider
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -473,7 +474,14 @@ func (r *incidentPipelineResource) Delete(ctx context.Context, req resource.Dele
 		}
 	}
 
-	apiResp, err := r.client.Gen.IncidentPipelinesDeleteIncidentPipelineEndpointWithResponse(ctx, state.ID.ValueString())
+	apiResp, err := r.client.Gen.IncidentPipelinesDeleteIncidentPipelineEndpointWithResponse(ctx, state.ID.ValueString(),
+		func(ctx context.Context, req *http.Request) error {
+			q := req.URL.Query()
+			q.Set("delete_incidents", "true")
+			req.URL.RawQuery = q.Encode()
+			return nil
+		},
+	)
 	if err != nil {
 		resp.Diagnostics.AddError("Error deleting incident pipeline", err.Error())
 		return
