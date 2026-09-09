@@ -10,9 +10,11 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
@@ -40,15 +42,24 @@ type skillResource struct {
 // versioned Markdown document: the metadata (name/description/tags/labels) is
 // edited in place, while every change to content publishes a new version.
 type skillResourceModel struct {
-	ID             types.String `tfsdk:"id"`
-	Name           types.String `tfsdk:"name"`
-	Description    types.String `tfsdk:"description"`
-	Content        types.String `tfsdk:"content"`
-	Labels         types.Map    `tfsdk:"labels"`
-	Tags           types.List   `tfsdk:"tags"`
-	Kind           types.String `tfsdk:"kind"`
-	ContentVersion types.Int64  `tfsdk:"content_version"`
-	UpdatedAt      types.String `tfsdk:"updated_at"`
+	ID             types.String             `tfsdk:"id"`
+	Name           types.String             `tfsdk:"name"`
+	Description    types.String             `tfsdk:"description"`
+	Content        types.String             `tfsdk:"content"`
+	Resources      []skillResourceFileModel `tfsdk:"resources"`
+	Labels         types.Map                `tfsdk:"labels"`
+	Tags           types.List               `tfsdk:"tags"`
+	Kind           types.String             `tfsdk:"kind"`
+	ContentVersion types.Int64              `tfsdk:"content_version"`
+	UpdatedAt      types.String             `tfsdk:"updated_at"`
+}
+
+// skillResourceFileModel is one supporting file of the skill folder: `content` is
+// SKILL.md, and each of these is a sibling it links to by relative path.
+type skillResourceFileModel struct {
+	Path       types.String `tfsdk:"path"`
+	Content    types.String `tfsdk:"content"`
+	Executable types.Bool   `tfsdk:"executable"`
 }
 
 func (r *skillResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -83,6 +94,36 @@ func (r *skillResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 				Optional:      true,
 				Computed:      true,
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"resources": schema.ListNestedAttribute{
+				MarkdownDescription: "The rest of the skill folder: the `references/`, `assets/` and " +
+					"`scripts/` files `content` links to. Each `path` is relative to the skill folder and is " +
+					"exactly the path written in the SKILL.md body, so an agent finds the file where its own " +
+					"instructions say it is. Published together with `content` as one version, so a change to " +
+					"either publishes a new one.",
+				Optional: true,
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"path": schema.StringAttribute{
+							MarkdownDescription: "Path relative to the skill folder, e.g. `references/rollback.md` " +
+								"or `scripts/deploy.sh`. Must not be absolute, contain `..`, or be `SKILL.md`.",
+							Required: true,
+						},
+						"content": schema.StringAttribute{
+							MarkdownDescription: "The file's text.",
+							Optional:            true,
+							Computed:            true,
+							Default:             stringdefault.StaticString(""),
+						},
+						"executable": schema.BoolAttribute{
+							MarkdownDescription: "Set for a script the skill tells the agent to run: the worker " +
+								"restores the executable bit when it writes the folder.",
+							Optional: true,
+							Computed: true,
+							Default:  booldefault.StaticBool(false),
+						},
+					},
+				},
 			},
 			"labels": schema.MapAttribute{
 				MarkdownDescription: "Arbitrary key/value labels used for ABAC scoping.",
@@ -131,6 +172,12 @@ func (r *skillResource) Create(ctx context.Context, req resource.CreateRequest, 
 		Description: stringToPtr(plan.Description),
 		Content:     stringToPtr(plan.Content),
 	}
+	// The create route publishes version 1 from `content` alone — it carries no resources — so a
+	// skill with a folder is created without content and gets one version published below instead.
+	// Sending both would make the folder arrive as version 2, with a contentless version 1 behind it.
+	if len(plan.Resources) > 0 {
+		body.Content = nil
+	}
 	resp.Diagnostics.Append(stringMapToPtr(ctx, plan.Labels, &body.Labels)...)
 	resp.Diagnostics.Append(listToStringSlice(ctx, plan.Tags, &body.Tags)...)
 	if resp.Diagnostics.HasError() {
@@ -151,7 +198,15 @@ func (r *skillResource) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
-	resp.Diagnostics.Append(skillApplyDetail(ctx, &plan, apiResp.JSON201)...)
+	detail := apiResp.JSON201
+	if len(plan.Resources) > 0 {
+		detail = r.publishVersion(ctx, apiResp.JSON201.SkillId, plan, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
+
+	resp.Diagnostics.Append(skillApplyDetail(ctx, &plan, detail)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -227,36 +282,15 @@ func (r *skillResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	}
 	detail := apiResp.JSON200
 
-	// A changed content body publishes a new version. Compare against prior state
-	// so an unchanged body does not churn the version counter.
-	if !plan.Content.IsNull() && !plan.Content.IsUnknown() && plan.Content.ValueString() != state.Content.ValueString() {
-		verResp, err := r.client.Gen.SkillsPublishSkillVersionRouteWithResponse(ctx, plan.ID.ValueString(), gen.PublishSkillVersionRequest{
-			Content: plan.Content.ValueString(),
-		})
-		if err != nil {
-			resp.Diagnostics.AddError("Error publishing skill version", err.Error())
+	// A changed content body or a changed folder publishes a new version — they are one version, so
+	// either one alone is a publish. Compared against prior state so an unchanged skill does not churn
+	// the version counter.
+	contentChanged := !plan.Content.IsNull() && !plan.Content.IsUnknown() && plan.Content.ValueString() != state.Content.ValueString()
+	if contentChanged || !skillResourcesEqual(plan.Resources, state.Resources) {
+		detail = r.publishVersion(ctx, plan.ID.ValueString(), plan, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
 			return
 		}
-		if err := client.Check(verResp.HTTPResponse, verResp.Body); err != nil {
-			resp.Diagnostics.AddError("Error publishing skill version", err.Error())
-			return
-		}
-
-		// Re-read so content/content_version/updated_at reflect the new version.
-		getResp, err := r.client.Gen.SkillsGetSkillRouteWithResponse(ctx, plan.ID.ValueString())
-		if err != nil {
-			resp.Diagnostics.AddError("Error reading skill after publishing version", err.Error())
-			return
-		}
-		if err := client.Check(getResp.HTTPResponse, getResp.Body); err != nil {
-			resp.Diagnostics.AddError("Error reading skill after publishing version", err.Error())
-			return
-		}
-		if getResp.JSON200 == nil {
-			resp.Diagnostics.AddError("Error reading skill after publishing version", "API returned an empty body")
-			return
-		}
-		detail = getResp.JSON200
 	}
 
 	resp.Diagnostics.Append(skillApplyDetail(ctx, &plan, detail)...)
@@ -288,12 +322,95 @@ func (r *skillResource) ImportState(ctx context.Context, req resource.ImportStat
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
+// publishVersion publishes `content` plus the whole folder as one new version and returns the skill
+// as it reads back afterwards, so content/content_version/updated_at reflect what was published.
+func (r *skillResource) publishVersion(ctx context.Context, id string, plan skillResourceModel, diags *diag.Diagnostics) *gen.SkillDetail {
+	verResp, err := r.client.Gen.SkillsPublishSkillVersionRouteWithResponse(ctx, id, gen.PublishSkillVersionRequest{
+		Content:   plan.Content.ValueString(),
+		Resources: skillResourcesToAPI(plan.Resources),
+	})
+	if err != nil {
+		diags.AddError("Error publishing skill version", err.Error())
+		return nil
+	}
+	if err := client.Check(verResp.HTTPResponse, verResp.Body); err != nil {
+		diags.AddError("Error publishing skill version", err.Error())
+		return nil
+	}
+
+	getResp, err := r.client.Gen.SkillsGetSkillRouteWithResponse(ctx, id)
+	if err != nil {
+		diags.AddError("Error reading skill after publishing version", err.Error())
+		return nil
+	}
+	if err := client.Check(getResp.HTTPResponse, getResp.Body); err != nil {
+		diags.AddError("Error reading skill after publishing version", err.Error())
+		return nil
+	}
+	if getResp.JSON200 == nil {
+		diags.AddError("Error reading skill after publishing version", "API returned an empty body")
+		return nil
+	}
+	return getResp.JSON200
+}
+
+func skillResourcesToAPI(items []skillResourceFileModel) *[]gen.SkillResource {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]gen.SkillResource, 0, len(items))
+	for _, item := range items {
+		out = append(out, gen.SkillResource{
+			Path:       item.Path.ValueString(),
+			Content:    stringToPtr(item.Content),
+			Executable: boolToPtr(item.Executable),
+		})
+	}
+	return &out
+}
+
+func skillResourcesFromAPI(items *[]gen.SkillResource) []skillResourceFileModel {
+	if items == nil || len(*items) == 0 {
+		return nil
+	}
+	out := make([]skillResourceFileModel, 0, len(*items))
+	for _, item := range *items {
+		content := ""
+		if item.Content != nil {
+			content = *item.Content
+		}
+		executable := false
+		if item.Executable != nil {
+			executable = *item.Executable
+		}
+		out = append(out, skillResourceFileModel{
+			Path:       types.StringValue(item.Path),
+			Content:    types.StringValue(content),
+			Executable: types.BoolValue(executable),
+		})
+	}
+	return out
+}
+
+func skillResourcesEqual(a, b []skillResourceFileModel) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if !a[i].Path.Equal(b[i].Path) || !a[i].Content.Equal(b[i].Content) || !a[i].Executable.Equal(b[i].Executable) {
+			return false
+		}
+	}
+	return true
+}
+
 // skillApplyDetail writes a SkillDetail response into the model.
 func skillApplyDetail(ctx context.Context, m *skillResourceModel, s *gen.SkillDetail) diag.Diagnostics {
 	m.ID = types.StringValue(s.SkillId)
 	m.Name = types.StringValue(s.Name)
 	m.Description = types.StringValue(s.Description)
 	m.Content = types.StringValue(s.Content)
+	m.Resources = skillResourcesFromAPI(s.Resources)
 	m.Kind = types.StringValue(enumPtrToString(s.Kind))
 	m.ContentVersion = intPtrToInt64(s.ContentVersion)
 	m.UpdatedAt = types.StringValue(s.UpdatedAt)

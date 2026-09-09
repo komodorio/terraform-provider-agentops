@@ -11291,8 +11291,9 @@ type PrunedBinding struct {
 
 // PublishSkillVersionRequest defines model for PublishSkillVersionRequest.
 type PublishSkillVersionRequest struct {
-	Content    string    `json:"content"`
-	References *[]string `json:"references,omitempty"`
+	Content    string           `json:"content"`
+	References *[]string        `json:"references,omitempty"`
+	Resources  *[]SkillResource `json:"resources,omitempty"`
 }
 
 // PurgedResponse defines model for PurgedResponse.
@@ -12466,6 +12467,7 @@ type SkillDetail struct {
 	Name           string               `json:"name"`
 	Path           *string              `json:"path"`
 	References     []SkillReference     `json:"references"`
+	Resources      *[]SkillResource     `json:"resources,omitempty"`
 	SkillId        string               `json:"skill_id"`
 	SourceAgents   *[]SkillSourceAgent  `json:"source_agents,omitempty"`
 	Tags           []string             `json:"tags"`
@@ -12516,6 +12518,18 @@ type SkillReference struct {
 	Filename string `json:"filename"`
 }
 
+// SkillResource defines model for SkillResource.
+type SkillResource struct {
+	// Content The file's text; binary files are not carried.
+	Content *string `json:"content,omitempty"`
+
+	// Executable Restore the executable bit when materializing (scripts).
+	Executable *bool `json:"executable,omitempty"`
+
+	// Path Path relative to the skill folder, e.g. 'references/api.md' or 'scripts/run.sh'.
+	Path string `json:"path"`
+}
+
 // SkillSourceAgent defines model for SkillSourceAgent.
 type SkillSourceAgent struct {
 	Md5           string  `json:"md5"`
@@ -12544,12 +12558,13 @@ type SkillSummary struct {
 
 // SkillVersionResponse defines model for SkillVersionResponse.
 type SkillVersionResponse struct {
-	Content    string   `json:"content"`
-	CreatedAt  string   `json:"created_at"`
-	Id         string   `json:"id"`
-	References []string `json:"references"`
-	SkillId    string   `json:"skill_id"`
-	Version    int      `json:"version"`
+	Content    string           `json:"content"`
+	CreatedAt  string           `json:"created_at"`
+	Id         string           `json:"id"`
+	References []string         `json:"references"`
+	Resources  *[]SkillResource `json:"resources,omitempty"`
+	SkillId    string           `json:"skill_id"`
+	Version    int              `json:"version"`
 }
 
 // SlackBotAccess defines model for SlackBotAccess.
@@ -15309,7 +15324,8 @@ func (t CreateGuardrailRequest_Criteria_Item) AsPatternCriterionModel() (Pattern
 
 // FromPatternCriterionModel overwrites any union data inside the CreateGuardrailRequest_Criteria_Item as the provided PatternCriterionModel
 func (t *CreateGuardrailRequest_Criteria_Item) FromPatternCriterionModel(v PatternCriterionModel) error {
-	p := PatternCriterionModelVariant("pattern"); v.Variant = &p
+	p := PatternCriterionModelVariant("pattern")
+	v.Variant = &p
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
@@ -15317,7 +15333,8 @@ func (t *CreateGuardrailRequest_Criteria_Item) FromPatternCriterionModel(v Patte
 
 // MergePatternCriterionModel performs a merge with any union data inside the CreateGuardrailRequest_Criteria_Item, using the provided PatternCriterionModel
 func (t *CreateGuardrailRequest_Criteria_Item) MergePatternCriterionModel(v PatternCriterionModel) error {
-	p := PatternCriterionModelVariant("pattern"); v.Variant = &p
+	p := PatternCriterionModelVariant("pattern")
+	v.Variant = &p
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -15337,7 +15354,8 @@ func (t CreateGuardrailRequest_Criteria_Item) AsModelRequestPatternCriterionMode
 
 // FromModelRequestPatternCriterionModel overwrites any union data inside the CreateGuardrailRequest_Criteria_Item as the provided ModelRequestPatternCriterionModel
 func (t *CreateGuardrailRequest_Criteria_Item) FromModelRequestPatternCriterionModel(v ModelRequestPatternCriterionModel) error {
-	p := ModelRequestPatternCriterionModelVariant("content_pattern"); v.Variant = &p
+	p := ModelRequestPatternCriterionModelVariant("content_pattern")
+	v.Variant = &p
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
@@ -15345,7 +15363,8 @@ func (t *CreateGuardrailRequest_Criteria_Item) FromModelRequestPatternCriterionM
 
 // MergeModelRequestPatternCriterionModel performs a merge with any union data inside the CreateGuardrailRequest_Criteria_Item, using the provided ModelRequestPatternCriterionModel
 func (t *CreateGuardrailRequest_Criteria_Item) MergeModelRequestPatternCriterionModel(v ModelRequestPatternCriterionModel) error {
-	p := ModelRequestPatternCriterionModelVariant("content_pattern"); v.Variant = &p
+	p := ModelRequestPatternCriterionModelVariant("content_pattern")
+	v.Variant = &p
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -15365,7 +15384,8 @@ func (t CreateGuardrailRequest_Criteria_Item) AsToolResponsePatternCriterionMode
 
 // FromToolResponsePatternCriterionModel overwrites any union data inside the CreateGuardrailRequest_Criteria_Item as the provided ToolResponsePatternCriterionModel
 func (t *CreateGuardrailRequest_Criteria_Item) FromToolResponsePatternCriterionModel(v ToolResponsePatternCriterionModel) error {
-	p := ToolResponsePatternCriterionModelVariant("response_pattern"); v.Variant = &p
+	p := ToolResponsePatternCriterionModelVariant("response_pattern")
+	v.Variant = &p
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
@@ -15373,7 +15393,8 @@ func (t *CreateGuardrailRequest_Criteria_Item) FromToolResponsePatternCriterionM
 
 // MergeToolResponsePatternCriterionModel performs a merge with any union data inside the CreateGuardrailRequest_Criteria_Item, using the provided ToolResponsePatternCriterionModel
 func (t *CreateGuardrailRequest_Criteria_Item) MergeToolResponsePatternCriterionModel(v ToolResponsePatternCriterionModel) error {
-	p := ToolResponsePatternCriterionModelVariant("response_pattern"); v.Variant = &p
+	p := ToolResponsePatternCriterionModelVariant("response_pattern")
+	v.Variant = &p
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -15458,7 +15479,8 @@ func (t GuardrailResponse_Criteria_Item) AsPatternCriterionModel() (PatternCrite
 
 // FromPatternCriterionModel overwrites any union data inside the GuardrailResponse_Criteria_Item as the provided PatternCriterionModel
 func (t *GuardrailResponse_Criteria_Item) FromPatternCriterionModel(v PatternCriterionModel) error {
-	p := PatternCriterionModelVariant("pattern"); v.Variant = &p
+	p := PatternCriterionModelVariant("pattern")
+	v.Variant = &p
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
@@ -15466,7 +15488,8 @@ func (t *GuardrailResponse_Criteria_Item) FromPatternCriterionModel(v PatternCri
 
 // MergePatternCriterionModel performs a merge with any union data inside the GuardrailResponse_Criteria_Item, using the provided PatternCriterionModel
 func (t *GuardrailResponse_Criteria_Item) MergePatternCriterionModel(v PatternCriterionModel) error {
-	p := PatternCriterionModelVariant("pattern"); v.Variant = &p
+	p := PatternCriterionModelVariant("pattern")
+	v.Variant = &p
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -15486,7 +15509,8 @@ func (t GuardrailResponse_Criteria_Item) AsModelRequestPatternCriterionModel() (
 
 // FromModelRequestPatternCriterionModel overwrites any union data inside the GuardrailResponse_Criteria_Item as the provided ModelRequestPatternCriterionModel
 func (t *GuardrailResponse_Criteria_Item) FromModelRequestPatternCriterionModel(v ModelRequestPatternCriterionModel) error {
-	p := ModelRequestPatternCriterionModelVariant("content_pattern"); v.Variant = &p
+	p := ModelRequestPatternCriterionModelVariant("content_pattern")
+	v.Variant = &p
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
@@ -15494,7 +15518,8 @@ func (t *GuardrailResponse_Criteria_Item) FromModelRequestPatternCriterionModel(
 
 // MergeModelRequestPatternCriterionModel performs a merge with any union data inside the GuardrailResponse_Criteria_Item, using the provided ModelRequestPatternCriterionModel
 func (t *GuardrailResponse_Criteria_Item) MergeModelRequestPatternCriterionModel(v ModelRequestPatternCriterionModel) error {
-	p := ModelRequestPatternCriterionModelVariant("content_pattern"); v.Variant = &p
+	p := ModelRequestPatternCriterionModelVariant("content_pattern")
+	v.Variant = &p
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -15514,7 +15539,8 @@ func (t GuardrailResponse_Criteria_Item) AsToolResponsePatternCriterionModel() (
 
 // FromToolResponsePatternCriterionModel overwrites any union data inside the GuardrailResponse_Criteria_Item as the provided ToolResponsePatternCriterionModel
 func (t *GuardrailResponse_Criteria_Item) FromToolResponsePatternCriterionModel(v ToolResponsePatternCriterionModel) error {
-	p := ToolResponsePatternCriterionModelVariant("response_pattern"); v.Variant = &p
+	p := ToolResponsePatternCriterionModelVariant("response_pattern")
+	v.Variant = &p
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
@@ -15522,7 +15548,8 @@ func (t *GuardrailResponse_Criteria_Item) FromToolResponsePatternCriterionModel(
 
 // MergeToolResponsePatternCriterionModel performs a merge with any union data inside the GuardrailResponse_Criteria_Item, using the provided ToolResponsePatternCriterionModel
 func (t *GuardrailResponse_Criteria_Item) MergeToolResponsePatternCriterionModel(v ToolResponsePatternCriterionModel) error {
-	p := ToolResponsePatternCriterionModelVariant("response_pattern"); v.Variant = &p
+	p := ToolResponsePatternCriterionModelVariant("response_pattern")
+	v.Variant = &p
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -15669,7 +15696,8 @@ func (t UpdateGuardrailRequest_Criteria_Item) AsPatternCriterionModel() (Pattern
 
 // FromPatternCriterionModel overwrites any union data inside the UpdateGuardrailRequest_Criteria_Item as the provided PatternCriterionModel
 func (t *UpdateGuardrailRequest_Criteria_Item) FromPatternCriterionModel(v PatternCriterionModel) error {
-	p := PatternCriterionModelVariant("pattern"); v.Variant = &p
+	p := PatternCriterionModelVariant("pattern")
+	v.Variant = &p
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
@@ -15677,7 +15705,8 @@ func (t *UpdateGuardrailRequest_Criteria_Item) FromPatternCriterionModel(v Patte
 
 // MergePatternCriterionModel performs a merge with any union data inside the UpdateGuardrailRequest_Criteria_Item, using the provided PatternCriterionModel
 func (t *UpdateGuardrailRequest_Criteria_Item) MergePatternCriterionModel(v PatternCriterionModel) error {
-	p := PatternCriterionModelVariant("pattern"); v.Variant = &p
+	p := PatternCriterionModelVariant("pattern")
+	v.Variant = &p
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -15697,7 +15726,8 @@ func (t UpdateGuardrailRequest_Criteria_Item) AsModelRequestPatternCriterionMode
 
 // FromModelRequestPatternCriterionModel overwrites any union data inside the UpdateGuardrailRequest_Criteria_Item as the provided ModelRequestPatternCriterionModel
 func (t *UpdateGuardrailRequest_Criteria_Item) FromModelRequestPatternCriterionModel(v ModelRequestPatternCriterionModel) error {
-	p := ModelRequestPatternCriterionModelVariant("content_pattern"); v.Variant = &p
+	p := ModelRequestPatternCriterionModelVariant("content_pattern")
+	v.Variant = &p
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
@@ -15705,7 +15735,8 @@ func (t *UpdateGuardrailRequest_Criteria_Item) FromModelRequestPatternCriterionM
 
 // MergeModelRequestPatternCriterionModel performs a merge with any union data inside the UpdateGuardrailRequest_Criteria_Item, using the provided ModelRequestPatternCriterionModel
 func (t *UpdateGuardrailRequest_Criteria_Item) MergeModelRequestPatternCriterionModel(v ModelRequestPatternCriterionModel) error {
-	p := ModelRequestPatternCriterionModelVariant("content_pattern"); v.Variant = &p
+	p := ModelRequestPatternCriterionModelVariant("content_pattern")
+	v.Variant = &p
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -15725,7 +15756,8 @@ func (t UpdateGuardrailRequest_Criteria_Item) AsToolResponsePatternCriterionMode
 
 // FromToolResponsePatternCriterionModel overwrites any union data inside the UpdateGuardrailRequest_Criteria_Item as the provided ToolResponsePatternCriterionModel
 func (t *UpdateGuardrailRequest_Criteria_Item) FromToolResponsePatternCriterionModel(v ToolResponsePatternCriterionModel) error {
-	p := ToolResponsePatternCriterionModelVariant("response_pattern"); v.Variant = &p
+	p := ToolResponsePatternCriterionModelVariant("response_pattern")
+	v.Variant = &p
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
@@ -15733,7 +15765,8 @@ func (t *UpdateGuardrailRequest_Criteria_Item) FromToolResponsePatternCriterionM
 
 // MergeToolResponsePatternCriterionModel performs a merge with any union data inside the UpdateGuardrailRequest_Criteria_Item, using the provided ToolResponsePatternCriterionModel
 func (t *UpdateGuardrailRequest_Criteria_Item) MergeToolResponsePatternCriterionModel(v ToolResponsePatternCriterionModel) error {
-	p := ToolResponsePatternCriterionModelVariant("response_pattern"); v.Variant = &p
+	p := ToolResponsePatternCriterionModelVariant("response_pattern")
+	v.Variant = &p
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err

@@ -23,3 +23,30 @@ resource "agentops_skill" "deploy_runbook" {
 
 # For a real skill, keep the body in a file and let a change to it publish a new
 # version: content = file("${path.module}/skills/deploy-runbook.md")
+
+# A skill is a folder, not one file: `content` is SKILL.md and `resources` are the
+# siblings it links to, at the same relative paths the body writes. The worker
+# materializes the folder where its harness looks for skills, so a link to
+# references/rollback.md resolves and scripts/deploy.sh arrives executable.
+resource "agentops_skill" "deploy_runbook_folder" {
+  name = "deploy-runbook-with-references"
+
+  content = <<-EOT
+    # Deploy runbook
+
+    Roll out in stages. For the rollback procedure see [references/rollback.md](references/rollback.md).
+    To cut a canary, run `scripts/deploy.sh --canary`.
+  EOT
+
+  resources = [
+    {
+      path    = "references/rollback.md"
+      content = file("${path.module}/skills/deploy-runbook/references/rollback.md")
+    },
+    {
+      path       = "scripts/deploy.sh"
+      content    = file("${path.module}/skills/deploy-runbook/scripts/deploy.sh")
+      executable = true
+    },
+  ]
+}
