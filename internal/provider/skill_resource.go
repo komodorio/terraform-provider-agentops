@@ -5,6 +5,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -202,6 +203,15 @@ func (r *skillResource) Create(ctx context.Context, req resource.CreateRequest, 
 	if len(plan.Resources) > 0 {
 		detail = r.publishVersion(ctx, apiResp.JSON201.SkillId, plan, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
+			// The skill exists but no state was written, so Terraform does not know about it and the
+			// next apply collides with its name. Take it back out rather than leaving an orphan only a
+			// hand-written API call can clear.
+			if _, err := client.Do(r.client.Gen.SkillsDeleteSkillRoute(ctx, apiResp.JSON201.SkillId)); err != nil {
+				resp.Diagnostics.AddWarning(
+					"Skill left behind after a failed publish",
+					fmt.Sprintf("Created %s but publishing its first version failed, and deleting it failed too: %s", apiResp.JSON201.SkillId, err),
+				)
+			}
 			return
 		}
 	}
@@ -325,15 +335,11 @@ func (r *skillResource) ImportState(ctx context.Context, req resource.ImportStat
 // publishVersion publishes `content` plus the whole folder as one new version and returns the skill
 // as it reads back afterwards, so content/content_version/updated_at reflect what was published.
 func (r *skillResource) publishVersion(ctx context.Context, id string, plan skillResourceModel, diags *diag.Diagnostics) *gen.SkillDetail {
-	verResp, err := r.client.Gen.SkillsPublishSkillVersionRouteWithResponse(ctx, id, gen.PublishSkillVersionRequest{
-		Content:   plan.Content.ValueString(),
-		Resources: skillResourcesToAPI(plan.Resources),
-	})
-	if err != nil {
-		diags.AddError("Error publishing skill version", err.Error())
-		return nil
-	}
-	if err := client.Check(verResp.HTTPResponse, verResp.Body); err != nil {
+	// client.Do, not the typed wrapper: a rejected resource path comes back as a 422 whose `detail` is
+	// a plain string, which the wrapper fails to unmarshal and reports as an opaque json error with
+	// the reason and the status both gone.
+	body := gen.PublishSkillVersionRequest{Content: plan.Content.ValueString(), Resources: skillResourcesToAPI(plan.Resources)}
+	if _, err := client.Do(r.client.Gen.SkillsPublishSkillVersionRoute(ctx, id, body)); err != nil {
 		diags.AddError("Error publishing skill version", err.Error())
 		return nil
 	}
