@@ -46,6 +46,66 @@ func TestAccSkillResource(t *testing.T) {
 	})
 }
 
+func TestAccSkillResourceWithFolder(t *testing.T) {
+	mock := newMockServer(t)
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// A skill is a folder: SKILL.md plus the files it links to. The whole folder is one
+				// version, so version 1 has to carry it — not a contentless v1 with the folder in v2.
+				Config: testAccSkillFolderConfig(mock.URL, "# Deploy\n", "detail v1"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("agentops_skill.folder", "content", "# Deploy\n"),
+					resource.TestCheckResourceAttr("agentops_skill.folder", "content_version", "1"),
+					resource.TestCheckResourceAttr("agentops_skill.folder", "resources.#", "2"),
+					resource.TestCheckResourceAttr("agentops_skill.folder", "resources.0.path", "references/rollback.md"),
+					resource.TestCheckResourceAttr("agentops_skill.folder", "resources.0.content", "detail v1"),
+					resource.TestCheckResourceAttr("agentops_skill.folder", "resources.0.executable", "false"),
+					resource.TestCheckResourceAttr("agentops_skill.folder", "resources.1.path", "scripts/deploy.sh"),
+					resource.TestCheckResourceAttr("agentops_skill.folder", "resources.1.executable", "true"),
+				),
+			},
+			{
+				ResourceName:      "agentops_skill.folder",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+			{
+				// A resource-only edit is still a content change: it publishes a new version, because
+				// the folder and the body are versioned together.
+				Config: testAccSkillFolderConfig(mock.URL, "# Deploy\n", "detail v2"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("agentops_skill.folder", "content_version", "2"),
+					resource.TestCheckResourceAttr("agentops_skill.folder", "resources.0.content", "detail v2"),
+				),
+			},
+		},
+	})
+}
+
+func testAccSkillFolderConfig(endpoint, content, reference string) string {
+	return mockProviderConfig(endpoint) + fmt.Sprintf(`
+resource "agentops_skill" "folder" {
+  name    = "deploy-runbook-folder"
+  content = %q
+
+  resources = [
+    {
+      path    = "references/rollback.md"
+      content = %q
+    },
+    {
+      path       = "scripts/deploy.sh"
+      content    = "#!/bin/sh\n"
+      executable = true
+    },
+  ]
+}
+`, content, reference)
+}
+
 func testAccSkillConfig(endpoint, name, content string) string {
 	return mockProviderConfig(endpoint) + fmt.Sprintf(`
 resource "agentops_skill" "test" {

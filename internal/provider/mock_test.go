@@ -619,6 +619,7 @@ func (m *mockServer) createSkill(w http.ResponseWriter, r *http.Request) {
 		"path":            nil,
 		"updated_at":      mockTS,
 		"references":      []any{},
+		"resources":       []any{},
 		"content_version": nil,
 		"source_agents":   []any{},
 	}
@@ -675,6 +676,9 @@ func (m *mockServer) publishSkillVersion(w http.ResponseWriter, r *http.Request,
 		next = cur + 1
 	}
 	skill["content"] = strOr(body["content"], "")
+	// The folder belongs to the version, so a publish replaces it wholesale — the same rule the real
+	// route follows, and what lets the acceptance suite catch a resource the provider fails to send.
+	skill["resources"] = sliceOrEmpty(body["resources"])
 	skill["content_version"] = next
 	skill["updated_at"] = mockTS
 	writeJSON(w, http.StatusCreated, map[string]any{
@@ -683,6 +687,7 @@ func (m *mockServer) publishSkillVersion(w http.ResponseWriter, r *http.Request,
 		"version":    next,
 		"content":    skill["content"],
 		"references": sliceOrEmpty(body["references"]),
+		"resources":  skill["resources"],
 		"created_at": mockTS,
 	})
 }

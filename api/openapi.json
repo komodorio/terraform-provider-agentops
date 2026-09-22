@@ -24986,6 +24986,13 @@
             },
             "title": "References",
             "type": "array"
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/SkillResource"
+            },
+            "title": "Resources",
+            "type": "array"
           }
         },
         "required": [
@@ -29884,6 +29891,13 @@
               }
             ],
             "title": "Version"
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/SkillResource"
+            },
+            "title": "Resources",
+            "type": "array"
           }
         },
         "required": [
@@ -30032,6 +30046,32 @@
           "content"
         ],
         "title": "SkillReference",
+        "type": "object"
+      },
+      "SkillResource": {
+        "properties": {
+          "content": {
+            "default": "",
+            "description": "The file's text; binary files are not carried.",
+            "title": "Content",
+            "type": "string"
+          },
+          "executable": {
+            "default": false,
+            "description": "Restore the executable bit when materializing (scripts).",
+            "title": "Executable",
+            "type": "boolean"
+          },
+          "path": {
+            "description": "Path relative to the skill folder, e.g. 'references/api.md' or 'scripts/run.sh'.",
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "title": "SkillResource",
         "type": "object"
       },
       "SkillSourceAgent": {
@@ -30207,6 +30247,13 @@
           "version": {
             "title": "Version",
             "type": "integer"
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/SkillResource"
+            },
+            "title": "Resources",
+            "type": "array"
           }
         },
         "required": [

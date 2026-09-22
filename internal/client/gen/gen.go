@@ -11291,8 +11291,9 @@ type PrunedBinding struct {
 
 // PublishSkillVersionRequest defines model for PublishSkillVersionRequest.
 type PublishSkillVersionRequest struct {
-	Content    string    `json:"content"`
-	References *[]string `json:"references,omitempty"`
+	Content    string           `json:"content"`
+	References *[]string        `json:"references,omitempty"`
+	Resources  *[]SkillResource `json:"resources,omitempty"`
 }
 
 // PurgedResponse defines model for PurgedResponse.
@@ -12466,6 +12467,7 @@ type SkillDetail struct {
 	Name           string               `json:"name"`
 	Path           *string              `json:"path"`
 	References     []SkillReference     `json:"references"`
+	Resources      *[]SkillResource     `json:"resources,omitempty"`
 	SkillId        string               `json:"skill_id"`
 	SourceAgents   *[]SkillSourceAgent  `json:"source_agents,omitempty"`
 	Tags           []string             `json:"tags"`
@@ -12516,6 +12518,18 @@ type SkillReference struct {
 	Filename string `json:"filename"`
 }
 
+// SkillResource defines model for SkillResource.
+type SkillResource struct {
+	// Content The file's text; binary files are not carried.
+	Content *string `json:"content,omitempty"`
+
+	// Executable Restore the executable bit when materializing (scripts).
+	Executable *bool `json:"executable,omitempty"`
+
+	// Path Path relative to the skill folder, e.g. 'references/api.md' or 'scripts/run.sh'.
+	Path string `json:"path"`
+}
+
 // SkillSourceAgent defines model for SkillSourceAgent.
 type SkillSourceAgent struct {
 	Md5           string  `json:"md5"`
@@ -12544,12 +12558,13 @@ type SkillSummary struct {
 
 // SkillVersionResponse defines model for SkillVersionResponse.
 type SkillVersionResponse struct {
-	Content    string   `json:"content"`
-	CreatedAt  string   `json:"created_at"`
-	Id         string   `json:"id"`
-	References []string `json:"references"`
-	SkillId    string   `json:"skill_id"`
-	Version    int      `json:"version"`
+	Content    string           `json:"content"`
+	CreatedAt  string           `json:"created_at"`
+	Id         string           `json:"id"`
+	References []string         `json:"references"`
+	Resources  *[]SkillResource `json:"resources,omitempty"`
+	SkillId    string           `json:"skill_id"`
+	Version    int              `json:"version"`
 }
 
 // SlackBotAccess defines model for SlackBotAccess.
